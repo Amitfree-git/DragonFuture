@@ -1,0 +1,36 @@
+name: Import DragonFuture source v2
+
+on:
+  push:
+    paths:
+      - '.bundle/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rebuild source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .bundle/part-* | base64 --decode > /tmp/DragonFuture-source.tar.gz
+          echo 'aa0f380a803063a9d21e88d95b3a173e1d1a89b18564cde143867a15dba0c7ee  /tmp/DragonFuture-source.tar.gz' | sha256sum -c -
+          tar -xzf /tmp/DragonFuture-source.tar.gz -C .
+          rm -rf .bundle .upload
+          rm -f .github/workflows/import-dragonfuture.yml
+          rm -f .github/workflows/import-dragonfuture-v2.yml
+      - name: Commit imported source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: import DragonFuture futures analyst V1'
+          git push origin HEAD:main
