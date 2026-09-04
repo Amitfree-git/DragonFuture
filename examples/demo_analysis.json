@@ -1,0 +1,996 @@
+{
+  "analysis_id": "8f3768cc-0b71-44bc-96a9-83b4036bfd68",
+  "request_hash": "d3332b16eb31c6ee77fa397c29d5fdcb7fa20cda4e889553bb269f1976529d6f",
+  "input_data_hash": "c4c91f2b6e9253964b989ddb69c165580c0347ec459f14a0ac8309d7a0635e9f",
+  "request": {
+    "symbol": "RB",
+    "exchange": "SHFE",
+    "contract": null,
+    "horizon": "swing",
+    "as_of": "2026-09-04T17:00:00+08:00",
+    "include_narrative": true,
+    "force_refresh": false
+  },
+  "selected_contract": "RB2701",
+  "source_contracts": [
+    "RB2610",
+    "RB2701"
+  ],
+  "generated_at": "2026-09-04T05:58:02.188832Z",
+  "data_cutoff": "2026-09-04T17:00:00+08:00",
+  "data_quality": {
+    "status": "ok",
+    "overall_score": 100.0,
+    "required_data_coverage": 100.0,
+    "stale_sources": [],
+    "missing_fields": [],
+    "blocking_issues": [],
+    "warnings": []
+  },
+  "factors": [
+    {
+      "factor": "trend",
+      "status": "ok",
+      "score": 97.29469212372533,
+      "coverage": 100.0,
+      "confidence": 99.3409090909091,
+      "contributions": [
+        {
+          "feature_name": "return_20d",
+          "feature_score": 98.20766228634844,
+          "weight": 0.3,
+          "weighted_contribution": 29.46229868590453,
+          "metric_ids": [
+            "ec5f390f57e2b38795e527e3"
+          ]
+        },
+        {
+          "feature_name": "return_60d",
+          "feature_score": 99.99981718348614,
+          "weight": 0.3,
+          "weighted_contribution": 29.999945155045843,
+          "metric_ids": [
+            "1280f005d0bec888071fc721"
+          ]
+        },
+        {
+          "feature_name": "return_120d",
+          "feature_score": 99.99999939083838,
+          "weight": 0.15,
+          "weighted_contribution": 14.999999908625757,
+          "metric_ids": [
+            "f93cfa697a9521564261ef20"
+          ]
+        },
+        {
+          "feature_name": "ma_structure",
+          "feature_score": 85.54965582766133,
+          "weight": 0.15,
+          "weighted_contribution": 12.832448374149198,
+          "metric_ids": [
+            "eae3ee2ae3cb1ce1eb013960"
+          ]
+        },
+        {
+          "feature_name": "breakout_position_120d",
+          "feature_score": 100.0,
+          "weight": 0.1,
+          "weighted_contribution": 10.0,
+          "metric_ids": [
+            "6765bc79341bbb3c5c06cee5"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "da93e9f973acaaae41010c0f",
+        "845531d21fb4e39544218817",
+        "95f0f6ab88cbefaee3b6f00b",
+        "e37f5b902b83d3f1d09912bf",
+        "9eb5b25250afc145318724fe"
+      ],
+      "warnings": []
+    },
+    {
+      "factor": "momentum",
+      "status": "ok",
+      "score": 98.62941826766249,
+      "coverage": 100.0,
+      "confidence": 100.0,
+      "contributions": [
+        {
+          "feature_name": "return_5d",
+          "feature_score": 99.64708903470304,
+          "weight": 0.3,
+          "weighted_contribution": 29.894126710410912,
+          "metric_ids": [
+            "6ef8359684786f2581f24aec"
+          ]
+        },
+        {
+          "feature_name": "return_20d",
+          "feature_score": 98.20766228634844,
+          "weight": 0.3,
+          "weighted_contribution": 29.46229868590453,
+          "metric_ids": [
+            "ec5f390f57e2b38795e527e3"
+          ]
+        },
+        {
+          "feature_name": "rsi_14",
+          "feature_score": 100.0,
+          "weight": 0.2,
+          "weighted_contribution": 20.0,
+          "metric_ids": [
+            "fad4fdb9318910234e7f62b4"
+          ]
+        },
+        {
+          "feature_name": "momentum_acceleration",
+          "feature_score": 96.3649643567352,
+          "weight": 0.2,
+          "weighted_contribution": 19.272992871347043,
+          "metric_ids": [
+            "b09c6608522551f5009c6f35"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "e0449a8649a716fa3661c1b9",
+        "33dd18d2c02c15e15c6276b2",
+        "eab4cfc10a1ae78c56339859",
+        "a653812fc81a77a81fc3a6ae"
+      ],
+      "warnings": []
+    },
+    {
+      "factor": "positioning",
+      "status": "ok",
+      "score": 72.72699363800783,
+      "coverage": 100.0,
+      "confidence": 100.0,
+      "contributions": [
+        {
+          "feature_name": "positioning_composite",
+          "feature_score": 72.72699363800783,
+          "weight": 1.0,
+          "weighted_contribution": 72.72699363800783,
+          "metric_ids": [
+            "a43b6d11c639307e9502157e"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "f584290cf3df6ff85498ecdf"
+      ],
+      "warnings": []
+    },
+    {
+      "factor": "term_structure",
+      "status": "ok",
+      "score": 12.409731023285243,
+      "coverage": 100.0,
+      "confidence": 100.0,
+      "contributions": [
+        {
+          "feature_name": "curve_slope",
+          "feature_score": 17.34119641708071,
+          "weight": 0.5,
+          "weighted_contribution": 8.670598208540355,
+          "metric_ids": [
+            "643d163068f90be1c91e2594"
+          ]
+        },
+        {
+          "feature_name": "curve_slope_change_20d",
+          "feature_score": -26.083558516557964,
+          "weight": 0.3,
+          "weighted_contribution": -7.825067554967389,
+          "metric_ids": [
+            "474394ec22a2d0ace5fc71d5"
+          ]
+        },
+        {
+          "feature_name": "curve_curvature",
+          "feature_score": 57.82100184856138,
+          "weight": 0.2,
+          "weighted_contribution": 11.564200369712276,
+          "metric_ids": [
+            "cf2ce800bc24f2a1adffdd78"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "b0f2d489b7d3cc88133fe7d3",
+        "9bc6e191afdead26319b2761",
+        "c7ba5a54d91a39bc852967e4"
+      ],
+      "warnings": []
+    }
+  ],
+  "regime": {
+    "primary": "strong_bull_trend",
+    "secondary": [
+      "trend_acceleration",
+      "position_building"
+    ],
+    "volatility_regime": "normal",
+    "liquidity_regime": "high",
+    "regime_confidence": 99.83522727272728,
+    "hypothesis_labels": []
+  },
+  "direction": {
+    "horizon": "swing",
+    "score": 76.96622666676399,
+    "label": "strong_bullish",
+    "available_factor_weight": 100.0,
+    "factor_scores": {
+      "trend": 97.29469212372533,
+      "momentum": 98.62941826766249,
+      "positioning": 72.72699363800783,
+      "term_structure": 12.409731023285243
+    }
+  },
+  "confidence": {
+    "score": 99.91745898935598,
+    "data_coverage": 100.0,
+    "freshness": 99.62856545210191,
+    "factor_agreement": 100.0,
+    "data_quality": 100.0,
+    "historical_calibration": null
+  },
+  "opportunity": {
+    "side": "long",
+    "action": "wait_for_pullback",
+    "score": 56.576195679366975,
+    "entry_quality": 26.0,
+    "regime_fit": 90.0,
+    "liquidity_quality": 78.37682371368916,
+    "hard_gate_reasons": []
+  },
+  "risk": {
+    "score": 28.043228222086288,
+    "level": "low",
+    "hard_gate_triggered": false,
+    "items": [
+      {
+        "risk_code": "volatility_risk",
+        "severity": 45.7286432160804,
+        "description": "波动率风险未处于极端区间。",
+        "hard_gate": false,
+        "observed_value": 72.8643216080402,
+        "threshold": 75.0,
+        "metric_ids": [
+          "b4e1946be4e6a5d7adbd93ce"
+        ]
+      },
+      {
+        "risk_code": "liquidity_risk",
+        "severity": 21.623176286310837,
+        "description": "按成交量、持仓量及品种占比评估流动性。",
+        "hard_gate": false,
+        "observed_value": 78.37682371368916,
+        "threshold": 20.0,
+        "metric_ids": [
+          "841f0db13e72f469a689cc3d"
+        ]
+      },
+      {
+        "risk_code": "roll_risk",
+        "severity": 0.0,
+        "description": "根据距离到期日评估移仓和交割风险。",
+        "hard_gate": false,
+        "observed_value": 133.0,
+        "threshold": 7.0,
+        "metric_ids": [
+          "8e2d7e5f303ac6138cab6590"
+        ]
+      },
+      {
+        "risk_code": "price_limit_risk",
+        "severity": 0.0,
+        "description": "价格距离涨跌停边界尚有空间。",
+        "hard_gate": false,
+        "observed_value": 0.0,
+        "threshold": 90.0,
+        "metric_ids": [
+          "ae5fa3fa3b8e13972858ccee"
+        ]
+      },
+      {
+        "risk_code": "crowding_risk",
+        "severity": 100.0,
+        "description": "高持仓分位提示潜在拥挤，但不识别拥挤方向。",
+        "hard_gate": false,
+        "observed_value": 100.0,
+        "threshold": 90.0,
+        "metric_ids": [
+          "b59974d531518df1a91d4ce4"
+        ]
+      },
+      {
+        "risk_code": "data_quality_risk",
+        "severity": 0.0,
+        "description": "数据质量风险可控。",
+        "hard_gate": false,
+        "observed_value": 100.0,
+        "threshold": 60.0,
+        "metric_ids": []
+      }
+    ]
+  },
+  "metrics": {
+    "return_5d": {
+      "metric_id": "6ef8359684786f2581f24aec",
+      "name": "return_5d",
+      "value": 0.002930201973539992,
+      "unit": "ratio",
+      "normalized_score": 99.64708903470304,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 5,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "return_20d": {
+      "metric_id": "ec5f390f57e2b38795e527e3",
+      "name": "return_20d",
+      "value": 0.004354219784443281,
+      "unit": "ratio",
+      "normalized_score": 98.20766228634844,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "return_60d": {
+      "metric_id": "1280f005d0bec888071fc721",
+      "name": "return_60d",
+      "value": 0.0224860723730278,
+      "unit": "ratio",
+      "normalized_score": 99.99981718348614,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 60,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "return_120d": {
+      "metric_id": "f93cfa697a9521564261ef20",
+      "name": "return_120d",
+      "value": 0.04534625219888477,
+      "unit": "ratio",
+      "normalized_score": 99.99999939083838,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 120,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 97.27272727272728,
+      "status": "ok"
+    },
+    "settlement_vs_ma20": {
+      "metric_id": "75c1c848f6be57b754119ac3",
+      "name": "settlement_vs_ma20",
+      "value": 0.003605566550136219,
+      "unit": "ratio",
+      "normalized_score": 21.043340368391714,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "settlement_vs_ma60": {
+      "metric_id": "98847c86ca0ba6761e228c29",
+      "name": "settlement_vs_ma60",
+      "value": 0.0073924106893954455,
+      "unit": "ratio",
+      "normalized_score": 99.50794082513346,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 60,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "extension_atr": {
+      "metric_id": "0d95292717a3f8a3fa3df086",
+      "name": "extension_atr",
+      "value": 0.42724957666046703,
+      "unit": "atr",
+      "normalized_score": 21.043340368391714,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted+selected_contract",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "ma_structure": {
+      "metric_id": "eae3ee2ae3cb1ce1eb013960",
+      "name": "ma_structure",
+      "value": 85.54965582766133,
+      "unit": "score",
+      "normalized_score": 85.54965582766133,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 60,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "breakout_position_120d": {
+      "metric_id": "6765bc79341bbb3c5c06cee5",
+      "name": "breakout_position_120d",
+      "value": 1.0,
+      "unit": "ratio",
+      "normalized_score": 100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 120,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 97.5,
+      "status": "ok"
+    },
+    "rsi_14": {
+      "metric_id": "fad4fdb9318910234e7f62b4",
+      "name": "rsi_14",
+      "value": 100.0,
+      "unit": "index",
+      "normalized_score": 100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 14,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "momentum_acceleration": {
+      "metric_id": "b09c6608522551f5009c6f35",
+      "name": "momentum_acceleration",
+      "value": 0.0018416470274291719,
+      "unit": "ratio",
+      "normalized_score": 96.3649643567352,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "contract_return_5d": {
+      "metric_id": "d5ea7d555af00979a18093f0",
+      "name": "contract_return_5d",
+      "value": 0.0033575873104649823,
+      "unit": "ratio",
+      "normalized_score": 99.8613144290442,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 5,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "oi_change_5d": {
+      "metric_id": "e1239fbef23ed320a3de99dd",
+      "name": "oi_change_5d",
+      "value": 0.007002801120448154,
+      "unit": "ratio",
+      "normalized_score": 13.914738601002272,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 5,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "volume_zscore_20d": {
+      "metric_id": "096def2086127a9dad37645a",
+      "name": "volume_zscore_20d",
+      "value": 1.4043250151669695,
+      "unit": "zscore",
+      "normalized_score": 60.573861254393755,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "positioning_composite": {
+      "metric_id": "a43b6d11c639307e9502157e",
+      "name": "positioning_composite",
+      "value": 72.72699363800783,
+      "unit": "score",
+      "normalized_score": 72.72699363800783,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 5,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "curve_slope": {
+      "metric_id": "643d163068f90be1c91e2594",
+      "name": "curve_slope",
+      "value": 0.0350364564578573,
+      "unit": "annualized_log_spread",
+      "normalized_score": 17.34119641708071,
+      "observation_time": "2026-09-04T07:00:00Z",
+      "available_at": "2026-09-04T08:10:00Z",
+      "lookback": 99,
+      "percentile": 0.0,
+      "zscore": -1.3240815662892764,
+      "source": "real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "curve_slope_change_20d": {
+      "metric_id": "474394ec22a2d0ace5fc71d5",
+      "name": "curve_slope_change_20d",
+      "value": -0.0001940622423326141,
+      "unit": "annualized_log_spread",
+      "normalized_score": -26.083558516557964,
+      "observation_time": "2026-09-04T07:00:00Z",
+      "available_at": "2026-09-04T08:10:00Z",
+      "lookback": 20,
+      "percentile": null,
+      "zscore": -0.5340095639162957,
+      "source": "real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "curve_curvature": {
+      "metric_id": "cf2ce800bc24f2a1adffdd78",
+      "name": "curve_curvature",
+      "value": -0.000582856899817151,
+      "unit": "annualized_log_spread",
+      "normalized_score": 57.82100184856138,
+      "observation_time": "2026-09-04T07:00:00Z",
+      "available_at": "2026-09-04T08:10:00Z",
+      "lookback": 99,
+      "percentile": null,
+      "zscore": 1.3195390680938064,
+      "source": "real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "realized_vol_20d": {
+      "metric_id": "99f553a7adb4d15cb60ac3c4",
+      "name": "realized_vol_20d",
+      "value": 0.004369760149250627,
+      "unit": "annualized_ratio",
+      "normalized_score": null,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 20,
+      "percentile": 72.8643216080402,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "realized_vol_60d": {
+      "metric_id": "14717105bd1ae77272e418e5",
+      "name": "realized_vol_60d",
+      "value": 0.0056463605428719865,
+      "unit": "annualized_ratio",
+      "normalized_score": null,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 60,
+      "percentile": null,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "volatility_percentile": {
+      "metric_id": "b4e1946be4e6a5d7adbd93ce",
+      "name": "volatility_percentile",
+      "value": 72.8643216080402,
+      "unit": "percentile",
+      "normalized_score": 45.7286432160804,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 199,
+      "percentile": 72.8643216080402,
+      "zscore": null,
+      "source": "continuous_back_adjusted",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "volume_percentile": {
+      "metric_id": "ffa5c590044e20b9ceec037c",
+      "name": "volume_percentile",
+      "value": 100.0,
+      "unit": "percentile",
+      "normalized_score": 100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 252,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract+real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "open_interest_percentile": {
+      "metric_id": "b59974d531518df1a91d4ce4",
+      "name": "open_interest_percentile",
+      "value": 100.0,
+      "unit": "percentile",
+      "normalized_score": 100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 252,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract+real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "contract_volume_share": {
+      "metric_id": "f217ed00d16030481667e460",
+      "name": "contract_volume_share",
+      "value": 0.5690853489018627,
+      "unit": "ratio",
+      "normalized_score": 13.817069780372535,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 252,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract+real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "contract_open_interest_share": {
+      "metric_id": "83506e8c1cb012dd5a7ef819",
+      "name": "contract_open_interest_share",
+      "value": 0.5659875996457041,
+      "unit": "ratio",
+      "normalized_score": 13.197519929140825,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 252,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract+real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "liquidity_quality_score": {
+      "metric_id": "841f0db13e72f469a689cc3d",
+      "name": "liquidity_quality_score",
+      "value": 78.37682371368916,
+      "unit": "score",
+      "normalized_score": 56.753647427378326,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 252,
+      "percentile": null,
+      "zscore": null,
+      "source": "selected_contract+real_contract_curve",
+      "quality_score": 100.0,
+      "status": "ok"
+    },
+    "days_to_expiry": {
+      "metric_id": "7c1e3374df3ec43c6ce6bf9c",
+      "name": "days_to_expiry",
+      "value": 133.0,
+      "unit": "days",
+      "normalized_score": null,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 1,
+      "percentile": null,
+      "zscore": null,
+      "source": "contract_metadata",
+      "quality_score": 85.0,
+      "status": "ok"
+    },
+    "roll_risk_score": {
+      "metric_id": "8e2d7e5f303ac6138cab6590",
+      "name": "roll_risk_score",
+      "value": 0.0,
+      "unit": "risk_score",
+      "normalized_score": -100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 1,
+      "percentile": null,
+      "zscore": null,
+      "source": "contract_metadata",
+      "quality_score": 85.0,
+      "status": "ok"
+    },
+    "price_limit_proximity_risk": {
+      "metric_id": "ae5fa3fa3b8e13972858ccee",
+      "name": "price_limit_proximity_risk",
+      "value": 0.0,
+      "unit": "risk_score",
+      "normalized_score": -100.0,
+      "observation_time": "2026-09-04T00:00:00Z",
+      "available_at": "2026-09-04T08:06:00Z",
+      "lookback": 1,
+      "percentile": null,
+      "zscore": null,
+      "source": "contract_metadata",
+      "quality_score": 85.0,
+      "status": "ok"
+    }
+  },
+  "evidence": [
+    {
+      "evidence_id": "da93e9f973acaaae41010c0f",
+      "factor": "trend",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 98.20766228634844,
+      "claim": "20日价格收益对当前方向的证据为偏多。",
+      "metric_ids": [
+        "ec5f390f57e2b38795e527e3"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "845531d21fb4e39544218817",
+      "factor": "trend",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 99.99981718348614,
+      "claim": "60日价格收益对当前方向的证据为偏多。",
+      "metric_ids": [
+        "1280f005d0bec888071fc721"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "95f0f6ab88cbefaee3b6f00b",
+      "factor": "trend",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 99.99999939083838,
+      "claim": "120日价格收益对当前方向的证据为偏多。",
+      "metric_ids": [
+        "f93cfa697a9521564261ef20"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "e37f5b902b83d3f1d09912bf",
+      "factor": "trend",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 85.54965582766133,
+      "claim": "均线结构与斜率对当前方向的证据为偏多。",
+      "metric_ids": [
+        "eae3ee2ae3cb1ce1eb013960"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "9eb5b25250afc145318724fe",
+      "factor": "trend",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 100.0,
+      "claim": "价格在120日区间中的位置对当前方向的证据为偏多。",
+      "metric_ids": [
+        "6765bc79341bbb3c5c06cee5"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "e0449a8649a716fa3661c1b9",
+      "factor": "momentum",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 99.64708903470304,
+      "claim": "短期价格收益对当前方向的证据为偏多。",
+      "metric_ids": [
+        "6ef8359684786f2581f24aec"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "33dd18d2c02c15e15c6276b2",
+      "factor": "momentum",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 98.20766228634844,
+      "claim": "20日价格收益对当前方向的证据为偏多。",
+      "metric_ids": [
+        "ec5f390f57e2b38795e527e3"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "eab4cfc10a1ae78c56339859",
+      "factor": "momentum",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 100.0,
+      "claim": "14日RSI对当前方向的证据为偏多。",
+      "metric_ids": [
+        "fad4fdb9318910234e7f62b4"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "a653812fc81a77a81fc3a6ae",
+      "factor": "momentum",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 96.3649643567352,
+      "claim": "短期动量相对中期动量的加速度对当前方向的证据为偏多。",
+      "metric_ids": [
+        "b09c6608522551f5009c6f35"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "f584290cf3df6ff85498ecdf",
+      "factor": "positioning",
+      "stance": "bullish",
+      "kind": "inference",
+      "strength": 72.72699363800783,
+      "claim": "价格与持仓变化的组合结构对当前方向的证据为偏多。",
+      "metric_ids": [
+        "a43b6d11c639307e9502157e"
+      ],
+      "reasoning": "价格与持仓量的组合只能支持头寸结构推断，不能识别具体交易方的主动行为。"
+    },
+    {
+      "evidence_id": "b0f2d489b7d3cc88133fe7d3",
+      "factor": "term_structure",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 17.34119641708071,
+      "claim": "近远月年化期限结构斜率对当前方向的证据为偏多。",
+      "metric_ids": [
+        "643d163068f90be1c91e2594"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "9bc6e191afdead26319b2761",
+      "factor": "term_structure",
+      "stance": "bearish",
+      "kind": "fact",
+      "strength": 26.083558516557964,
+      "claim": "期限结构20日变化对当前方向的证据为偏空。",
+      "metric_ids": [
+        "474394ec22a2d0ace5fc71d5"
+      ],
+      "reasoning": null
+    },
+    {
+      "evidence_id": "c7ba5a54d91a39bc852967e4",
+      "factor": "term_structure",
+      "stance": "bullish",
+      "kind": "fact",
+      "strength": 57.82100184856138,
+      "claim": "期限结构曲率对当前方向的证据为偏多。",
+      "metric_ids": [
+        "cf2ce800bc24f2a1adffdd78"
+      ],
+      "reasoning": null
+    }
+  ],
+  "invalidation_conditions": [
+    {
+      "condition_id": "6f6e8242dc3716965425eb00",
+      "description": "连续两个交易日结算价跌破MA60。",
+      "metric_name": "settlement_vs_ma60",
+      "operator": "cross_below",
+      "threshold": 0.0,
+      "value_field": "value",
+      "lookback_bars": 1,
+      "consecutive_bars": 2,
+      "current_value": 0.0073924106893954455,
+      "triggered": false,
+      "severity_if_triggered": 75.0
+    },
+    {
+      "condition_id": "e1a428dbf28bdf93a18f6286",
+      "description": "20日波动率调整收益分数降至-25以下。",
+      "metric_name": "return_20d",
+      "operator": "lt",
+      "threshold": -25.0,
+      "value_field": "normalized_score",
+      "lookback_bars": 1,
+      "consecutive_bars": 2,
+      "current_value": 98.20766228634844,
+      "triggered": false,
+      "severity_if_triggered": 55.0
+    },
+    {
+      "condition_id": "e4036b11cbb1954985c6dff8",
+      "description": "期限结构斜率降至零以下。",
+      "metric_name": "curve_slope",
+      "operator": "lt",
+      "threshold": 0.0,
+      "value_field": "value",
+      "lookback_bars": 1,
+      "consecutive_bars": 2,
+      "current_value": 0.0350364564578573,
+      "triggered": false,
+      "severity_if_triggered": 70.0
+    }
+  ],
+  "versions": {
+    "schema_version": "1.0.0",
+    "data_version": "point_in_time_v1",
+    "feature_set_version": "futures_features_v1",
+    "factor_model_version": "futures_factors_v1",
+    "score_config_version": "futures_scores_v1",
+    "score_config_hash": "3b20de861d571f12ca364134c77ce2ed44c348ea5728cd953395f89d63611e7d",
+    "regime_rule_version": "futures_regime_v1",
+    "prompt_version": "template_narrative_v1",
+    "code_commit": null
+  },
+  "core_result_hash": "37bcdbca706f29515a51aadbdf5b8b4c16134b98d8933adbadecca1a70c854f1",
+  "narrative": {
+    "executive_summary": "RB/RB2701：方向=strong_bullish，机会=wait_for_pullback，置信度=99.9，风险=low。",
+    "market_structure": "主要状态为 strong_bull_trend；次级状态为 trend_acceleration, position_building；波动率状态为 normal。",
+    "bullish_case": [
+      "20日价格收益对当前方向的证据为偏多。 [evidence_id=da93e9f973acaaae41010c0f]",
+      "60日价格收益对当前方向的证据为偏多。 [evidence_id=845531d21fb4e39544218817]",
+      "120日价格收益对当前方向的证据为偏多。 [evidence_id=95f0f6ab88cbefaee3b6f00b]",
+      "均线结构与斜率对当前方向的证据为偏多。 [evidence_id=e37f5b902b83d3f1d09912bf]",
+      "价格在120日区间中的位置对当前方向的证据为偏多。 [evidence_id=9eb5b25250afc145318724fe]"
+    ],
+    "bearish_case": [
+      "期限结构20日变化对当前方向的证据为偏空。 [evidence_id=9bc6e191afdead26319b2761]"
+    ],
+    "conflict_analysis": [
+      "未发现达到阈值的实质性方向冲突。"
+    ],
+    "risk_summary": [
+      "高持仓分位提示潜在拥挤，但不识别拥挤方向。",
+      "波动率风险未处于极端区间。"
+    ],
+    "invalidation_summary": [
+      "连续两个交易日结算价跌破MA60。",
+      "20日波动率调整收益分数降至-25以下。",
+      "期限结构斜率降至零以下。"
+    ],
+    "final_conclusion": "方向判断为 strong_bullish，但应独立服从机会与风险门槛；当前研究动作是 wait_for_pullback，不构成直接下单指令。"
+  }
+}

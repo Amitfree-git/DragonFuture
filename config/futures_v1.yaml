@@ -1,0 +1,55 @@
+model:
+  name: futures_market_analyst
+  version: 1.0.0
+
+direction:
+  minimum_available_weight: 0.70
+  swing:
+    trend: 0.40
+    momentum: 0.25
+    positioning: 0.15
+    term_structure: 0.20
+  position:
+    trend: 0.45
+    momentum: 0.15
+    positioning: 0.10
+    term_structure: 0.30
+
+labels:
+  strong_bullish: 60.0
+  bullish: 25.0
+  bearish: -25.0
+  strong_bearish: -60.0
+
+confidence:
+  coverage: 0.30
+  freshness: 0.20
+  agreement: 0.25
+  data_quality: 0.15
+  historical_calibration: 0.10
+
+opportunity:
+  direction_strength: 0.45
+  entry_quality: 0.25
+  regime_fit: 0.15
+  liquidity_quality: 0.15
+  risk_penalty: 0.35
+
+hard_gates:
+  risk_score: 80.0
+  confidence_score: 45.0
+  minimum_days_to_expiry: 7
+  minimum_direction_abs_score: 25.0
+  minimum_data_quality: 60.0
+  minimum_liquidity_quality: 20.0
+
+volatility:
+  low_percentile: 25.0
+  high_percentile: 75.0
+  extreme_percentile: 90.0
+
+main_contract:
+  exclude_days_to_expiry_below: 10
+  confirmation_days: 2
+  minimum_volume_share: 0.15
+  minimum_oi_share: 0.15
