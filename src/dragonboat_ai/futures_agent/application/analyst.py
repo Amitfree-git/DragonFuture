@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from dragonboat_ai.futures_agent.domain.enums import OpportunityAction
 from dragonboat_ai.futures_agent.domain.models import (
     AnalysisRequest,
     AnalysisVersions,
@@ -61,7 +62,7 @@ class FuturesMarketAnalyst:
         base_versions = versions or AnalysisVersions(
             schema_version="1.0.0",
             data_version="point_in_time_v1",
-            feature_set_version="futures_features_v1",
+            feature_set_version="futures_features_v1_1",
             factor_model_version="futures_factors_v1",
             score_config_version="futures_scores_v1",
             score_config_hash=config_hash,
@@ -118,6 +119,15 @@ class FuturesMarketAnalyst:
             confidence=confidence,
             metrics=metrics,
         )
+        if data_quality.blocking_issues:
+            opportunity = opportunity.model_copy(
+                update={
+                    "action": OpportunityAction.INSUFFICIENT_DATA,
+                    "hard_gate_reasons": sorted(
+                        set(opportunity.hard_gate_reasons + data_quality.blocking_issues)
+                    ),
+                }
+            )
         invalidation = self.invalidation_engine.build_conditions(
             direction=direction,
             regime=regime,

@@ -28,6 +28,7 @@ class DataStatus(str, Enum):
     PARTIAL = "partial"
     MISSING = "missing"
     INSUFFICIENT = "insufficient"
+    INVALID = "invalid"
 
 
 class EvidenceKind(str, Enum):

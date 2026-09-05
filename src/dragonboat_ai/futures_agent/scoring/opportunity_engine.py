@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dragonboat_ai.futures_agent.domain.enums import OpportunityAction, TradeSide
+from dragonboat_ai.futures_agent.domain.enums import DataStatus, OpportunityAction, TradeSide
 from dragonboat_ai.futures_agent.domain.models import (
     ConfidenceAssessment,
     DirectionAssessment,
@@ -48,7 +48,16 @@ class OpportunityEngine:
         )
         entry_quality = self._entry_quality(side, metrics)
         regime_fit = self._regime_fit(side, regime)
-        liquidity = self._metric_value(metrics, "liquidity_quality_score", default=50.0)
+        liquidity_metric = metrics.get("liquidity_quality_score")
+        if (
+            liquidity_metric is None
+            or liquidity_metric.status not in {DataStatus.OK, DataStatus.PARTIAL}
+            or liquidity_metric.value is None
+        ):
+            hard_reasons.append("missing_liquidity_quality")
+            liquidity = 0.0
+        else:
+            liquidity = float(liquidity_metric.value)
 
         if direction.score is None:
             score = 0.0
@@ -81,17 +90,21 @@ class OpportunityEngine:
         )
 
     def _entry_quality(self, side: TradeSide, metrics: dict[str, MetricObservation]) -> float:
-        extension = self._metric_value(metrics, "extension_atr", default=0.0)
-        rsi = self._metric_value(metrics, "rsi_14", default=50.0)
+        extension = self._optional_metric(metrics, "extension_atr")
+        rsi = self._optional_metric(metrics, "rsi_14")
         quality = 75.0
         if side is TradeSide.LONG:
-            quality -= max(extension - 1.0, 0.0) * 22.0
-            quality -= max(rsi - 65.0, 0.0) * 1.4
-            quality += max(min(-extension, 1.0), 0.0) * 10.0
+            if extension is not None:
+                quality -= max(extension - 1.0, 0.0) * 22.0
+                quality += max(min(-extension, 1.0), 0.0) * 10.0
+            if rsi is not None:
+                quality -= max(rsi - 65.0, 0.0) * 1.4
         elif side is TradeSide.SHORT:
-            quality -= max(-extension - 1.0, 0.0) * 22.0
-            quality -= max(35.0 - rsi, 0.0) * 1.4
-            quality += max(min(extension, 1.0), 0.0) * 10.0
+            if extension is not None:
+                quality -= max(-extension - 1.0, 0.0) * 22.0
+                quality += max(min(extension, 1.0), 0.0) * 10.0
+            if rsi is not None:
+                quality -= max(35.0 - rsi, 0.0) * 1.4
         else:
             quality = 40.0
         return clip(quality, 0.0, 100.0)
@@ -124,11 +137,15 @@ class OpportunityEngine:
         regime: MarketRegime,
         metrics: dict[str, MetricObservation],
     ) -> OpportunityAction:
-        extension = OpportunityEngine._metric_value(metrics, "extension_atr", default=0.0)
-        rsi = OpportunityEngine._metric_value(metrics, "rsi_14", default=50.0)
-        if side is TradeSide.LONG and (extension >= 2.0 or rsi >= 75.0):
+        extension = OpportunityEngine._optional_metric(metrics, "extension_atr")
+        rsi = OpportunityEngine._optional_metric(metrics, "rsi_14")
+        if side is TradeSide.LONG and (
+            (extension is not None and extension >= 2.0) or (rsi is not None and rsi >= 75.0)
+        ):
             return OpportunityAction.WAIT_FOR_PULLBACK
-        if side is TradeSide.SHORT and (extension <= -2.0 or rsi <= 25.0):
+        if side is TradeSide.SHORT and (
+            (extension is not None and extension <= -2.0) or (rsi is not None and rsi <= 25.0)
+        ):
             return OpportunityAction.WAIT_FOR_REBOUND
         if regime.primary == "range" and score < 50.0:
             return OpportunityAction.WAIT_FOR_BREAKOUT
@@ -139,11 +156,12 @@ class OpportunityEngine:
         return OpportunityAction.NO_TRADE
 
     @staticmethod
-    def _metric_value(
-        metrics: dict[str, MetricObservation],
-        name: str,
-        *,
-        default: float,
-    ) -> float:
+    def _optional_metric(metrics: dict[str, MetricObservation], name: str) -> float | None:
         metric = metrics.get(name)
-        return float(metric.value) if metric is not None and metric.value is not None else default
+        if (
+            metric is None
+            or metric.status not in {DataStatus.OK, DataStatus.PARTIAL}
+            or metric.value is None
+        ):
+            return None
+        return float(metric.value)

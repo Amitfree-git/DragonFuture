@@ -32,7 +32,7 @@ class ReferenceFeatureEngine:
     weather and discretionary LLM inputs are excluded from this layer.
     """
 
-    FEATURE_SET_VERSION = "futures_features_v1"
+    FEATURE_SET_VERSION = "futures_features_v1_1"
 
     def compute(self, context: MarketContext) -> dict[str, MetricObservation]:
         metrics: dict[str, MetricObservation] = {}
@@ -250,7 +250,7 @@ class ReferenceFeatureEngine:
         volume_zscore = None
         volume_score = None
         if len(volumes) >= 21:
-            volume_zscore = robust_zscore(volumes[-1], volumes[-61:-1])
+            volume_zscore = robust_zscore(volumes[-1], volumes[-21:-1])
             volume_score = tanh_score(volume_zscore) if volume_zscore is not None else None
 
         positioning = None
@@ -577,24 +577,38 @@ class ReferenceFeatureEngine:
 
         latest = max(context.contract_bars, key=lambda item: item.trading_date, default=None)
         proximity = None
-        if latest:
+        limit_status: DataStatus | None = DataStatus.MISSING
+        if latest is None:
+            limit_status = DataStatus.MISSING
+        elif latest.upper_limit is None or latest.lower_limit is None:
+            limit_status = DataStatus.MISSING
+        else:
             price = float(latest.settlement)
-            distances: list[float] = []
-            if latest.upper_limit is not None and float(latest.upper_limit) > price > 0:
-                distances.append((float(latest.upper_limit) - price) / price)
-            if latest.lower_limit is not None and price > float(latest.lower_limit) > 0:
-                distances.append((price - float(latest.lower_limit)) / price)
-            if distances:
-                nearest = min(distances)
+            upper = float(latest.upper_limit)
+            lower = float(latest.lower_limit)
+            if price <= 0 or upper <= 0 or lower <= 0 or upper < lower:
+                limit_status = DataStatus.INVALID
+            elif price > upper or price < lower:
+                limit_status = DataStatus.INVALID
+            else:
+                nearest = min((upper - price) / price, (price - lower) / price)
                 proximity = clip((0.03 - nearest) / 0.03 * 100.0, 0.0, 100.0)
+                limit_status = DataStatus.OK
         metrics["price_limit_proximity_risk"] = self._observation(
             name="price_limit_proximity_risk",
             value=proximity,
             unit="risk_score",
             normalized_score=clip(proximity * 2.0 - 100.0, -100.0, 100.0) if proximity is not None else None,
             lookback=1,
+            status=limit_status,
             **common,
         )
+
+    @staticmethod
+    def _structure_side(left: float, right: float) -> float:
+        if math.isclose(left, right):
+            return 0.0
+        return 30.0 if left > right else -30.0
 
     @staticmethod
     def _relative_distance(price: float | None, reference: float | None) -> float | None:
@@ -614,8 +628,8 @@ class ReferenceFeatureEngine:
         latest = prices[-1]
         previous_ma20 = statistics.fmean(prices[-25:-5])
         base = 0.0
-        base += 30.0 if latest > ma20 else -30.0
-        base += 30.0 if ma20 > ma60 else -30.0
+        base += ReferenceFeatureEngine._structure_side(latest, ma20)
+        base += ReferenceFeatureEngine._structure_side(ma20, ma60)
         slope = math.log(ma20 / previous_ma20) if ma20 > 0 and previous_ma20 > 0 else 0.0
         slope_score = tanh_score(slope / (daily_vol * math.sqrt(5.0)), 1.5)
         return clip(base + 0.40 * slope_score, -100.0, 100.0)
@@ -653,13 +667,20 @@ class ReferenceFeatureEngine:
         return front - back
 
     @staticmethod
-    def _quality(sample_size: int, minimum_sample: int, value: float | None) -> tuple[DataStatus, float]:
-        if value is None:
+    def _quality(
+        sample_size: int,
+        minimum_sample: int,
+        value: float | None,
+        status: DataStatus | None = None,
+    ) -> tuple[DataStatus, float]:
+        if status is DataStatus.INVALID:
+            return DataStatus.INVALID, 0.0
+        if status is DataStatus.MISSING or value is None:
             return DataStatus.MISSING, 0.0
         if sample_size < minimum_sample:
             return DataStatus.INSUFFICIENT, clip(sample_size / max(minimum_sample, 1) * 100.0, 0.0, 100.0)
         quality = clip(70.0 + 30.0 * min(sample_size / max(minimum_sample * 2, 1), 1.0), 0.0, 100.0)
-        return DataStatus.OK, quality
+        return status or DataStatus.OK, quality
 
     def _observation(
         self,
@@ -677,8 +698,9 @@ class ReferenceFeatureEngine:
         minimum_sample: int,
         percentile: float | None = None,
         zscore: float | None = None,
+        status: DataStatus | None = None,
     ) -> MetricObservation:
-        status, quality = self._quality(sample_size, minimum_sample, value)
+        resolved_status, quality = self._quality(sample_size, minimum_sample, value, status)
         token = f"{context.symbol}|{context.selected_contract}|{context.request.as_of.isoformat()}|{name}"
         metric_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
         return MetricObservation(
@@ -694,5 +716,5 @@ class ReferenceFeatureEngine:
             zscore=zscore,
             source=source,
             quality_score=quality,
-            status=status,
+            status=resolved_status,
         )

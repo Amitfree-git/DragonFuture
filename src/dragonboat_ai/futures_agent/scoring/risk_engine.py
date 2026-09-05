@@ -7,7 +7,7 @@ from dragonboat_ai.futures_agent.domain.models import (
     RiskAssessment,
     RiskItem,
 )
-from dragonboat_ai.futures_agent.domain.enums import RiskLevel
+from dragonboat_ai.futures_agent.domain.enums import DataStatus, RiskLevel
 from dragonboat_ai.futures_agent.features.normalization import clip, risk_from_percentile
 
 from .config import ScoringConfig
@@ -127,6 +127,24 @@ class RiskEngine:
             )
         )
 
+        for name, code, label in (
+            ("liquidity_quality_score", "unknown_liquidity_risk", "流动性"),
+            ("price_limit_proximity_risk", "unknown_price_limit_risk", "涨跌停"),
+        ):
+            metric = metrics.get(name)
+            if metric is None or self._usable(metric):
+                continue
+            items.append(
+                RiskItem(
+                    risk_code=code,
+                    severity=100.0,
+                    description=f"{label}关键风险输入缺失或无效，禁止形成交易候选。",
+                    hard_gate=True,
+                    observed_value=None,
+                    metric_ids=[metric.metric_id],
+                )
+            )
+
         expiry_hard = context.days_to_expiry < int(self.config.hard_gates["minimum_days_to_expiry"])
         if expiry_hard:
             items.append(
@@ -157,9 +175,19 @@ class RiskEngine:
         )
 
     @staticmethod
+    def _usable(metric: MetricObservation | None) -> bool:
+        return (
+            metric is not None
+            and metric.status in {DataStatus.OK, DataStatus.PARTIAL}
+            and metric.value is not None
+        )
+
+    @staticmethod
     def _value(metrics: dict[str, MetricObservation], name: str) -> float | None:
         metric = metrics.get(name)
-        return metric.value if metric is not None else None
+        if metric is None or not RiskEngine._usable(metric):
+            return None
+        return metric.value
 
     @staticmethod
     def _level(score: float) -> RiskLevel:

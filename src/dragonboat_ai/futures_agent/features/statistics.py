@@ -36,12 +36,6 @@ def log_returns(values: Sequence[float]) -> list[float]:
     return output
 
 
-def simple_moving_average(values: Sequence[float], period: int) -> float | None:
-    if period < 1 or len(values) < period:
-        return None
-    return statistics.fmean(values[-period:])
-
-
 def realized_volatility(
     values: Sequence[float],
     period: int,
@@ -49,10 +43,19 @@ def realized_volatility(
 ) -> float | None:
     if period < 2 or len(values) < period + 1:
         return None
-    returns = log_returns(values[-period - 1 :])
-    if len(returns) < 2:
+    window = list(values[-period - 1 :])
+    if any(item <= 0 or not math.isfinite(item) for item in window):
+        return None
+    returns = log_returns(window)
+    if len(returns) != period:
         return None
     return statistics.stdev(returns) * math.sqrt(annualization)
+
+
+def simple_moving_average(values: Sequence[float], period: int) -> float | None:
+    if period < 1 or len(values) < period:
+        return None
+    return statistics.fmean(values[-period:])
 
 
 def rolling_realized_volatility(
@@ -74,13 +77,19 @@ def rsi(values: Sequence[float], period: int = 14) -> float | None:
     if period < 1 or len(values) < period + 1:
         return None
     changes = [current - previous for previous, current in zip(values, values[1:], strict=False)]
-    window = changes[-period:]
-    gains = [change for change in window if change > 0]
-    losses = [-change for change in window if change < 0]
-    average_gain = statistics.fmean(gains) if gains else 0.0
-    average_loss = statistics.fmean(losses) if losses else 0.0
-    if average_loss == 0:
-        return 100.0 if average_gain > 0 else 50.0
+    if len(changes) < period:
+        return None
+    gains = [max(change, 0.0) for change in changes]
+    losses = [max(-change, 0.0) for change in changes]
+    average_gain = statistics.fmean(gains[:period])
+    average_loss = statistics.fmean(losses[:period])
+    for gain, loss in zip(gains[period:], losses[period:], strict=False):
+        average_gain = (average_gain * (period - 1) + gain) / period
+        average_loss = (average_loss * (period - 1) + loss) / period
+    if average_loss == 0.0:
+        return 100.0 if average_gain > 0.0 else 50.0
+    if average_gain == 0.0:
+        return 0.0
     relative_strength = average_gain / average_loss
     return 100.0 - 100.0 / (1.0 + relative_strength)
 
