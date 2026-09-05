@@ -1,5 +1,7 @@
 # DragonFuture：期货行情分析 Agent V1
 
+> **详细设计与实施主计划（2026-09-05）：** 请先阅读[系统详细设计](docs/DESIGN.md)、[实施主计划](docs/IMPLEMENTATION_PLAN.md)及[基线审计](docs/BASELINE_AUDIT.md)。当前0.1.0仍是存在已登记正确性缺口的参考实现；合成测试通过不代表生产或交易有效性验收。本次仅补齐文档，不修改业务实现。
+
 DragonFuture 是一个独立的日频期货行情分析工程，同时保留 `dragonboat_ai.futures_agent` 包路径，便于未来合并到 DragonBoatAI。它以确定性计算为核心，重点保证 **point-in-time 数据安全、真实合约与连续合约隔离、结果可回放、证据可审计**。
 
 ## V1 已实现

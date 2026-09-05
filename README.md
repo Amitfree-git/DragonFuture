@@ -1,5 +1,7 @@
 # DragonFuture — Futures Market Analyst Agent V1
 
+> **Design and execution baseline (2026-09-05):** Read [Detailed design](docs/DESIGN.md), [Implementation plan](docs/IMPLEMENTATION_PLAN.md), and [Baseline audit](docs/BASELINE_AUDIT.md). The current 0.1.0 code is a reference implementation with documented correctness gaps; passing synthetic tests is not production or trading validation. This documentation update does not change the implementation.
+
 DragonFuture is a deterministic, point-in-time-safe daily futures market analysis service. Its Python package remains under `dragonboat_ai.futures_agent` so it can also be merged into DragonBoatAI without changing import paths.
 
 中文说明见 [`README.zh-CN.md`](README.zh-CN.md)。

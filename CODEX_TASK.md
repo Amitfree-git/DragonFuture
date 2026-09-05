@@ -1,5 +1,7 @@
 # Codex 后续任务书：真实数据接入与 DragonBoatAI 集成
 
+> **执行入口已更新（2026-09-05）：** 本文保留为历史集成任务书。当前架构以[DESIGN](docs/DESIGN.md)为准，任务顺序以[IMPLEMENTATION_PLAN](docs/IMPLEMENTATION_PLAN.md)为准，尤其先完成P00/P01；已发现问题见[BASELINE_AUDIT](docs/BASELINE_AUDIT.md)。本文历史测试数、接口名称和生产能力表述不得替代当前代码核查。
+
 ## 总目标
 
 把当前可独立运行的 V1 参考实现接入 `a-share-mvp/DragonBoatAI`，使用真实 point-in-time 期货数据，在不引入未来函数、不耦合交易执行的前提下，产出可供 Strategy Agent、Portfolio Manager 与 CIO 消费的结构化行情分析。

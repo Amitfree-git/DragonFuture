@@ -1,5 +1,7 @@
 # Codex handoff: DragonBoatAI Futures Market Analyst V1
 
+> **新版文档入口（2026-09-05）：** 本文保留历史合并背景。请先读[详细设计](docs/DESIGN.md)、[实施主计划](docs/IMPLEMENTATION_PLAN.md)及[基线审计](docs/BASELINE_AUDIT.md)；当前先修正参考实现，不直接跳到生产集成。
+
 ## Objective
 
 Merge the supplied futures-agent package into the existing DragonBoatAI repository without weakening point-in-time, revision-history or deterministic-scoring guarantees.
