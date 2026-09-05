@@ -181,6 +181,120 @@ class SqlAlchemyMarketDataRepository:
                 )
             )
 
+    def ingest_daily_bar(
+        self,
+        bar: DailyBar,
+        *,
+        data_batch_id: str | None = None,
+        correction_available_at: datetime | None = None,
+    ) -> str:
+        batch_id = data_batch_id or bar.data_batch_id
+        with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutBarDailyORM)
+                .where(
+                    FutBarDailyORM.contract_id == bar.contract_id,
+                    FutBarDailyORM.trading_date == bar.trading_date,
+                    FutBarDailyORM.source == bar.source,
+                )
+                .order_by(FutBarDailyORM.revision_no.desc())
+                .limit(1)
+            )
+            if existing is not None and existing.payload_hash == bar.payload_hash:
+                return "skipped"
+            if existing is None:
+                revision_no = bar.revision_no
+                available_at = bar.available_at
+            else:
+                revision_no = existing.revision_no + 1
+                available_at = correction_available_at or bar.available_at
+            session.add(
+                FutBarDailyORM(
+                    contract_id=bar.contract_id,
+                    trading_date=bar.trading_date,
+                    open_price=bar.open,
+                    high_price=bar.high,
+                    low_price=bar.low,
+                    close_price=bar.close,
+                    settlement_price=bar.settlement,
+                    previous_settlement=bar.previous_settlement,
+                    volume=bar.volume,
+                    turnover=bar.turnover,
+                    open_interest=bar.open_interest,
+                    upper_limit=bar.upper_limit,
+                    lower_limit=bar.lower_limit,
+                    source=bar.source,
+                    revision_no=revision_no,
+                    available_at=to_db_datetime(available_at),
+                    published_at=to_db_datetime(bar.published_at) if bar.published_at else None,
+                    received_at=to_db_datetime(bar.received_at) if bar.received_at else None,
+                    data_mode=bar.data_mode,
+                    data_batch_id=batch_id,
+                    payload_hash=bar.payload_hash,
+                )
+            )
+            return "inserted" if existing is None else "revised"
+
+    def ingest_curve_snapshot(
+        self,
+        snapshot: CurveSnapshot,
+        *,
+        data_batch_id: str | None = None,
+        correction_available_at: datetime | None = None,
+    ) -> str:
+        with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutCurveSnapshotORM)
+                .where(
+                    FutCurveSnapshotORM.instrument_id == snapshot.instrument_id,
+                    FutCurveSnapshotORM.trading_date == snapshot.trading_date,
+                    FutCurveSnapshotORM.source == snapshot.source,
+                )
+                .order_by(FutCurveSnapshotORM.revision_no.desc())
+                .limit(1)
+            )
+            if existing is not None and existing.input_hash == snapshot.input_hash:
+                return "skipped"
+            if existing is None:
+                revision_no = 1
+                available_at = snapshot.available_at
+                status = "inserted"
+            else:
+                revision_no = existing.revision_no + 1
+                available_at = correction_available_at or snapshot.available_at
+                status = "revised"
+            snapshot_id = (
+                f"{snapshot.symbol}-{snapshot.trading_date.isoformat()}-"
+                f"{snapshot.source}-r{revision_no}"
+            )
+            session.add(
+                FutCurveSnapshotORM(
+                    snapshot_id=snapshot_id,
+                    instrument_id=snapshot.instrument_id,
+                    trading_date=snapshot.trading_date,
+                    observed_at=to_db_datetime(snapshot.observed_at),
+                    available_at=to_db_datetime(available_at),
+                    source=snapshot.source,
+                    revision_no=revision_no,
+                    input_hash=snapshot.input_hash,
+                    data_batch_id=data_batch_id,
+                )
+            )
+            session.flush()
+            for sequence, point in enumerate(sorted(snapshot.points, key=lambda item: item.days_to_expiry), 1):
+                session.add(
+                    FutCurvePointORM(
+                        snapshot_id=snapshot_id,
+                        contract_id=point.contract_id,
+                        sequence_no=sequence,
+                        days_to_expiry=point.days_to_expiry,
+                        settlement_price=point.settlement,
+                        volume=point.volume,
+                        open_interest=point.open_interest,
+                    )
+                )
+            return status
+
     def add_continuous_bar(
         self,
         bar: ContinuousBar,
@@ -221,6 +335,7 @@ class SqlAlchemyMarketDataRepository:
                     source=snapshot.source,
                     revision_no=revision_no,
                     input_hash=snapshot.input_hash,
+                    data_batch_id=None,
                 )
             )
             # Explicit flush guarantees parent visibility for SQLite foreign-key
@@ -245,8 +360,19 @@ class SqlAlchemyMarketDataRepository:
         contract_id: int,
         as_of: datetime,
         limit: int = 400,
+        source: str | None = None,
     ) -> tuple[DailyBar, ...]:
         cutoff = to_db_datetime(as_of)
+        filters = [
+            FutBarDailyORM.contract_id == contract_id,
+            FutBarDailyORM.available_at <= cutoff,
+            or_(
+                FutBarDailyORM.data_batch_id.is_(None),
+                FutDataBatchORM.status == "committed",
+            ),
+        ]
+        if source is not None:
+            filters.append(FutBarDailyORM.source == source)
         ranked = (
             select(
                 FutBarDailyORM.bar_id.label("bar_id"),
@@ -258,14 +384,7 @@ class SqlAlchemyMarketDataRepository:
                 .label("revision_rank"),
             )
             .outerjoin(FutDataBatchORM, FutBarDailyORM.data_batch_id == FutDataBatchORM.batch_id)
-            .where(
-                FutBarDailyORM.contract_id == contract_id,
-                FutBarDailyORM.available_at <= cutoff,
-                or_(
-                    FutBarDailyORM.data_batch_id.is_(None),
-                    FutDataBatchORM.status == "committed",
-                ),
-            )
+            .where(*filters)
             .subquery()
         )
         stmt = (
@@ -340,9 +459,14 @@ class SqlAlchemyMarketDataRepository:
                 )
                 .label("revision_rank"),
             )
+            .outerjoin(FutDataBatchORM, FutCurveSnapshotORM.data_batch_id == FutDataBatchORM.batch_id)
             .where(
                 FutCurveSnapshotORM.instrument_id == instrument_id,
                 FutCurveSnapshotORM.available_at <= cutoff,
+                or_(
+                    FutCurveSnapshotORM.data_batch_id.is_(None),
+                    FutDataBatchORM.status == "committed",
+                ),
             )
             .subquery()
         )

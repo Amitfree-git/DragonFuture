@@ -282,6 +282,9 @@ class FutCurveSnapshotORM(Base):
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     revision_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_batch_id: Mapped[str | None] = mapped_column(
+        ForeignKey("fut_data_batch.batch_id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
 
 
