@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from dragonboat_ai.futures_agent.domain.exceptions import DataNotFoundError, PersistenceError
@@ -31,6 +31,7 @@ from .models import (
     FutContractORM,
     FutCurvePointORM,
     FutCurveSnapshotORM,
+    FutDataBatchORM,
     FutFactorSnapshotORM,
     FutFeatureSnapshotORM,
     FutFeatureValueORM,
@@ -172,7 +173,10 @@ class SqlAlchemyMarketDataRepository:
                     source=bar.source,
                     revision_no=bar.revision_no,
                     available_at=to_db_datetime(bar.available_at),
-                    data_batch_id=data_batch_id,
+                    published_at=to_db_datetime(bar.published_at) if bar.published_at else None,
+                    received_at=to_db_datetime(bar.received_at) if bar.received_at else None,
+                    data_mode=bar.data_mode,
+                    data_batch_id=data_batch_id or bar.data_batch_id,
                     payload_hash=bar.payload_hash,
                 )
             )
@@ -253,9 +257,14 @@ class SqlAlchemyMarketDataRepository:
                 )
                 .label("revision_rank"),
             )
+            .outerjoin(FutDataBatchORM, FutBarDailyORM.data_batch_id == FutDataBatchORM.batch_id)
             .where(
                 FutBarDailyORM.contract_id == contract_id,
                 FutBarDailyORM.available_at <= cutoff,
+                or_(
+                    FutBarDailyORM.data_batch_id.is_(None),
+                    FutDataBatchORM.status == "committed",
+                ),
             )
             .subquery()
         )
@@ -443,6 +452,7 @@ class SqlAlchemyMarketDataRepository:
             listed_date=row.listed_date,
             last_trade_date=row.last_trade_date,
             expiry_date=row.expiry_date,
+            tradable_until=row.tradable_until,
         )
 
     @staticmethod
@@ -466,6 +476,10 @@ class SqlAlchemyMarketDataRepository:
             available_at=from_db_datetime(row.available_at),
             source=row.source,
             payload_hash=row.payload_hash,
+            published_at=from_db_datetime(row.published_at) if row.published_at else None,
+            received_at=from_db_datetime(row.received_at) if row.received_at else None,
+            data_mode=row.data_mode or "final_only",
+            data_batch_id=row.data_batch_id,
         )
 
 
