@@ -59,6 +59,8 @@ class FutContractORM(Base):
     last_trade_date: Mapped[date | None] = mapped_column(Date)
     expiry_date: Mapped[date] = mapped_column(Date, nullable=False)
     delivery_month: Mapped[str | None] = mapped_column(String(8))
+    tradable_until: Mapped[date | None] = mapped_column(Date)
+    account_eligibility: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
 
@@ -79,6 +81,43 @@ class FutContractSpecORM(Base):
     tick_size: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
     margin_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
     trading_unit: Mapped[str | None] = mapped_column(String(64))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime)
+    source: Mapped[str | None] = mapped_column(String(64))
+    revision_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class FutDataManifestORM(Base):
+    __tablename__ = "fut_data_manifest"
+
+    manifest_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    source_policy: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    max_available_at: Mapped[datetime | None] = mapped_column(DateTime)
+    record_hash: Mapped[str | None] = mapped_column(String(64))
+    metadata_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class FutRawArchiveORM(Base):
+    __tablename__ = "fut_raw_archive"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "request_digest", "response_hash",
+            name="uq_fut_raw_archive_payload",
+        ),
+    )
+
+    archive_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    license_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    storage_uri: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
 
 
 class FutDataBatchORM(Base):
@@ -91,6 +130,9 @@ class FutDataBatchORM(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     row_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    manifest_id: Mapped[str | None] = mapped_column(
+        ForeignKey("fut_data_manifest.manifest_id", ondelete="SET NULL")
+    )
 
 
 class FutBarDailyORM(Base):
@@ -126,6 +168,9 @@ class FutBarDailyORM(Base):
     source: Mapped[str] = mapped_column(String(64), nullable=False)
     revision_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime)
+    data_mode: Mapped[str | None] = mapped_column(String(32))
     ingested_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
     data_batch_id: Mapped[str | None] = mapped_column(
         ForeignKey("fut_data_batch.batch_id", ondelete="SET NULL")
@@ -454,3 +499,24 @@ class FutAnalysisAuditLogORM(Base):
     actor: Mapped[str] = mapped_column(String(64), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
     details_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class FutCalendarDayORM(Base):
+    __tablename__ = "fut_calendar_day"
+    __table_args__ = (
+        UniqueConstraint(
+            "exchange", "version", "trading_date", "revision_no",
+            name="uq_fut_calendar_day_revision",
+        ),
+        Index("ix_fut_calendar_day_pit", "exchange", "trading_date", "available_at"),
+    )
+
+    day_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange: Mapped[str] = mapped_column(String(16), nullable=False)
+    version: Mapped[str] = mapped_column(String(64), nullable=False)
+    trading_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_trading_day: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revision_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    source: Mapped[str | None] = mapped_column(String(64))

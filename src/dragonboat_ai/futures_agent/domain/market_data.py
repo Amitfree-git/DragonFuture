@@ -27,6 +27,7 @@ class ContractRef:
     listed_date: date | None
     last_trade_date: date | None
     expiry_date: date
+    tradable_until: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +62,10 @@ class DailyBar:
     available_at: datetime
     source: str
     payload_hash: str
+    published_at: datetime | None = None
+    received_at: datetime | None = None
+    data_mode: str = "final_only"
+    data_batch_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
