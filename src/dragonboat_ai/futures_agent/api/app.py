@@ -18,6 +18,7 @@ from dragonboat_ai.futures_agent.infrastructure.database.session import (
     create_session_factory,
     create_sqlite_engine,
 )
+from dragonboat_ai.futures_agent.operations.auth import ReadOnlyAccessMiddleware
 from dragonboat_ai.futures_agent.scoring.config import ScoringConfig
 
 from .routes import router
@@ -67,7 +68,12 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app.state.market_repository = market_repository
     app.state.analysis_repository = analysis_repository
     app.state.analyst = analyst
+    from dragonboat_ai.futures_agent.application.refresh import RefreshAndAnalyzeService
+    app.state.refresh_service = RefreshAndAnalyzeService(market_repository, analyst)
     app.include_router(router)
+    from .market_routes import router as market_router
+    app.include_router(market_router)
+    app.add_middleware(ReadOnlyAccessMiddleware)
     return app
 
 

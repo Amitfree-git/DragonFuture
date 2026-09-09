@@ -154,10 +154,10 @@ class FutBarDailyORM(Base):
         ForeignKey("fut_contract.contract_id", ondelete="CASCADE"), nullable=False
     )
     trading_date: Mapped[date] = mapped_column(Date, nullable=False)
-    open_price: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
-    high_price: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
-    low_price: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
-    close_price: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
+    open_price: Mapped[Decimal | None] = mapped_column(PRICE_TYPE, nullable=True)
+    high_price: Mapped[Decimal | None] = mapped_column(PRICE_TYPE, nullable=True)
+    low_price: Mapped[Decimal | None] = mapped_column(PRICE_TYPE, nullable=True)
+    close_price: Mapped[Decimal | None] = mapped_column(PRICE_TYPE, nullable=True)
     settlement_price: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
     previous_settlement: Mapped[Decimal | None] = mapped_column(PRICE_TYPE)
     volume: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -251,6 +251,7 @@ class FutContinuousBarDailyORM(Base):
     )
     raw_settlement: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
     adjusted_settlement: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
+    research_index: Mapped[Decimal | None] = mapped_column(Numeric(38, 18))
     adjustment_method: Mapped[str] = mapped_column(String(32), nullable=False)
     cumulative_adjustment: Mapped[Decimal] = mapped_column(PRICE_TYPE, nullable=False)
     roll_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -260,6 +261,9 @@ class FutContinuousBarDailyORM(Base):
     available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     calculated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    series_snapshot_id: Mapped[str | None] = mapped_column(
+        ForeignKey("fut_series_snapshot.snapshot_id", ondelete="SET NULL")
+    )
 
 
 class FutCurveSnapshotORM(Base):
@@ -523,3 +527,94 @@ class FutCalendarDayORM(Base):
     revision_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     published_at: Mapped[datetime | None] = mapped_column(DateTime)
     source: Mapped[str | None] = mapped_column(String(64))
+
+
+class FutActiveContractMappingORM(Base):
+    __tablename__ = "fut_active_contract_mapping"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "decision_date",
+            "policy_version",
+            name="uq_fut_active_contract_mapping_decision",
+        ),
+        Index("ix_fut_mapping_effective", "instrument_id", "effective_session"),
+    )
+
+    mapping_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("fut_instrument.instrument_id", ondelete="CASCADE"), nullable=False
+    )
+    from_contract_id: Mapped[int | None] = mapped_column(ForeignKey("fut_contract.contract_id"))
+    to_contract_id: Mapped[int | None] = mapped_column(ForeignKey("fut_contract.contract_id"))
+    decision_date: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_session: Mapped[date | None] = mapped_column(Date)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    challenger_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    evidence_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class FutSeriesSnapshotORM(Base):
+    __tablename__ = "fut_series_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "instrument_id",
+            "series_type",
+            "calculation_version",
+            "input_hash",
+            name="uq_fut_series_snapshot_identity",
+        ),
+    )
+
+    snapshot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    instrument_id: Mapped[int] = mapped_column(
+        ForeignKey("fut_instrument.instrument_id", ondelete="CASCADE"), nullable=False
+    )
+    series_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    calculation_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class FutEventOutboxORM(Base):
+    __tablename__ = "fut_event_outbox"
+    __table_args__ = (
+        Index("ix_fut_event_outbox_status", "status", "available_at"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(96), nullable=False)
+    analysis_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    available_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class FutShadowRunORM(Base):
+    __tablename__ = "fut_shadow_run"
+
+
+    run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(16), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    session_date: Mapped[date] = mapped_column(Date, nullable=False)
+    horizon: Mapped[str] = mapped_column(String(16), nullable=False)
+    watermark_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    input_data_hash: Mapped[str | None] = mapped_column(String(64))
+    core_result_hash: Mapped[str | None] = mapped_column(String(64))
+    opportunity_action: Mapped[str | None] = mapped_column(String(32))
+    hard_gate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gap: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    candidate_emitted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    blocking_reasons: Mapped[list[str] | None] = mapped_column(JSON)
+    review_notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utc_now_naive)

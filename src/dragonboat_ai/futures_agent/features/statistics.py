@@ -100,6 +100,8 @@ def average_true_range_pct(bars: Sequence[DailyBar], period: int = 20) -> float 
     ordered = sorted(bars, key=lambda item: item.trading_date)
     true_ranges: list[float] = []
     for previous, current in zip(ordered[-period - 1 : -1], ordered[-period:], strict=True):
+        if current.high is None or current.low is None:
+            return None
         high = float(current.high)
         low = float(current.low)
         previous_close = float(previous.settlement)

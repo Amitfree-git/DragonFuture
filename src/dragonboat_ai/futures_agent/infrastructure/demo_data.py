@@ -69,6 +69,9 @@ def seed_reference_market(
 
     dates = business_days_ending(as_of.date(), 220)
     previous_contract_settlement: Decimal | None = None
+    research_index = Decimal("100")
+    previous_raw = None
+    previous_adjusted = None
     for index, trading_date in enumerate(dates):
         adjusted = 3300.0 + 1.25 * index + 16.0 * math.sin(index / 9.0)
         selected_price = adjusted - 7.0 + 2.0 * math.sin(index / 5.0)
@@ -98,6 +101,10 @@ def seed_reference_market(
 
         source = rb2610 if index < 130 else rb2701
         raw = adjusted - (80.0 if source.contract_code == "RB2610" else 0.0)
+        raw_decimal = decimal_price(raw)
+        denominator = previous_adjusted if index == 130 else previous_raw
+        if denominator is not None:
+            research_index *= raw_decimal / denominator
         repository.add_continuous_bar(
             ContinuousBar(
                 instrument_id=instrument_id,
@@ -105,7 +112,8 @@ def seed_reference_market(
                 trading_date=trading_date,
                 source_contract_id=source.contract_id,
                 source_contract=source.contract_code,
-                raw_settlement=decimal_price(raw),
+                raw_settlement=raw_decimal,
+                research_index=research_index,
                 adjusted_settlement=decimal_price(adjusted),
                 adjustment_value=Decimal("80") if source.contract_code == "RB2610" else Decimal("0"),
                 roll_flag=index == 130,
@@ -113,6 +121,9 @@ def seed_reference_market(
                 input_hash=hashlib.sha256(f"continuous|{trading_date}|{adjusted}".encode()).hexdigest(),
             )
         )
+
+        previous_raw = raw_decimal
+        previous_adjusted = decimal_price(adjusted)
 
     for index, trading_date in enumerate(dates[-100:]):
         base = 3520.0 + 0.9 * index + 8.0 * math.sin(index / 8.0)

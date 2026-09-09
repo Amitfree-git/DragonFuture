@@ -76,20 +76,17 @@ def map_fut_daily_bar(row: Mapping[str, Any], *, contract_id: int) -> DailyBar |
     high_price = row.get("high")
     low_price = row.get("low")
     close_price = row.get("close")
-    if any(
-        value is None
-        for value in (settle, volume, open_interest, open_price, high_price, low_price, close_price)
-    ):
+    if any(value is None for value in (settle, volume, open_interest)):
         return None
-
+    # Preserve missing prices; settlement-based research remains usable.
     parsed = parse_ts_code(str(row["ts_code"]))
     trading_date = parse_trade_date(str(row["trade_date"]))
     previous_settlement = row.get("pre_settle")
     amount = row.get("amount")
-    open_value = _as_decimal(open_price)
-    high_value = _as_decimal(high_price)
-    low_value = _as_decimal(low_price)
-    close_value = _as_decimal(close_price)
+    open_value = _as_decimal(open_price) if open_price is not None else None
+    high_value = _as_decimal(high_price) if high_price is not None else None
+    low_value = _as_decimal(low_price) if low_price is not None else None
+    close_value = _as_decimal(close_price) if close_price is not None else None
     settlement = _as_decimal(settle)
     validate_ohlc_settlement(
         open_=open_value,

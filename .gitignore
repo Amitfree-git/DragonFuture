@@ -7,9 +7,15 @@ __pycache__/
 htmlcov/
 .ruff_cache/
 .mypy_cache/
+data/captures/
 data/*.db
 data/*.db-*
+outputs/
 *.sqlite
 *.sqlite3
 .DS_Store
 outputs/*.json
+
+# Local market-data archives and refresh coordination files
+data/raw_archive/
+*.refresh.lock

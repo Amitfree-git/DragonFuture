@@ -46,6 +46,7 @@ class ExchangeCalendar:
         day_open: str,
         day_close: str,
         timezone_name: str = "Asia/Shanghai",
+        holidays: frozenset[date] = frozenset(),
     ) -> ExchangeCalendar:
         parse = time.fromisoformat
         return cls(
@@ -58,6 +59,7 @@ class ExchangeCalendar:
                 day_open=parse(day_open),
                 day_close=parse(day_close),
             ),
+            holidays=holidays,
         )
 
     def is_trading_day(self, value: date) -> bool:

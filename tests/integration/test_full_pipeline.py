@@ -113,7 +113,8 @@ def test_cache_identity_includes_narrative_request_and_model_versions(database) 
 
     assert no_narrative.narrative is None
     assert with_narrative.narrative is not None
-    assert with_narrative.analysis_id != no_narrative.analysis_id
+    assert with_narrative.core_result_hash == no_narrative.core_result_hash
+    assert with_narrative.analysis_id == no_narrative.analysis_id
 
     changed_versions = base_analyst.versions.model_copy(
         update={"factor_model_version": "futures_factors_v1.1-test"}

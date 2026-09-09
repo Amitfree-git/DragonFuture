@@ -159,6 +159,7 @@ class DeterministicFactorEngine:
                     weight=effective_weight,
                     weighted_contribution=contribution,
                     metric_ids=[metric.metric_id],
+                    lineage_id=metric.lineage_id or spec.name,
                 )
             )
             factor_evidence.append(self._evidence(context, factor, spec.name, metric))

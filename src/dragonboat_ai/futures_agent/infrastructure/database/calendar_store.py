@@ -6,6 +6,8 @@ from datetime import date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from sqlalchemy.exc import IntegrityError
+
 from dragonboat_ai.futures_agent.infrastructure.database.base import to_db_datetime
 from dragonboat_ai.futures_agent.infrastructure.database.models import FutCalendarDayORM
 
@@ -27,6 +29,16 @@ class SqlAlchemyCalendarStore:
         source: str | None = None,
     ) -> None:
         with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutCalendarDayORM).where(
+                    FutCalendarDayORM.exchange == exchange.upper(),
+                    FutCalendarDayORM.version == version,
+                    FutCalendarDayORM.trading_date == trading_date,
+                    FutCalendarDayORM.revision_no == revision_no,
+                )
+            )
+            if existing is not None:
+                return
             session.add(
                 FutCalendarDayORM(
                     exchange=exchange.upper(),

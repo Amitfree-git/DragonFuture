@@ -9,6 +9,7 @@ from dragonboat_ai.futures_agent.domain.market_data import (
     ContinuousBar,
     CurveSnapshot,
     DailyBar,
+    EffectiveContractMapping,
     InstrumentRef,
 )
 from dragonboat_ai.futures_agent.domain.models import FuturesMarketAnalysis
@@ -74,6 +75,15 @@ class MarketDataRepository(Protocol):
     ) -> date | None:
         ...
 
+    def load_effective_mapping(
+        self,
+        *,
+        instrument_id: int,
+        session_date: date,
+        as_of: datetime,
+    ) -> EffectiveContractMapping | None:
+        ...
+
 
 class AnalysisRepository(Protocol):
     def find_cached(
@@ -88,7 +98,15 @@ class AnalysisRepository(Protocol):
     def get(self, analysis_id: str) -> FuturesMarketAnalysis | None:
         ...
 
-    def latest(self, symbol: str, horizon: str) -> FuturesMarketAnalysis | None:
+    def latest(
+        self,
+        symbol: str,
+        horizon: str,
+        *,
+        exchange: str | None = None,
+        contract: str | None = None,
+        as_of: datetime | None = None,
+    ) -> FuturesMarketAnalysis | None:
         ...
 
     def save(

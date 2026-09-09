@@ -13,6 +13,7 @@ from dragonboat_ai.futures_agent.domain.models import (
 from .prompt import SYSTEM_PROMPT_ZH, build_narrative_payload
 
 _EVIDENCE_REFERENCE = re.compile(r"\[evidence_id=([A-Za-z0-9_-]+)\]")
+_FORBIDDEN_CLAIMS = re.compile(r"获利概率|胜率承诺|win probability|guaranteed return", re.I)
 
 
 class StructuredCompletionClient(Protocol):
@@ -40,6 +41,7 @@ class LLMNarrativeGenerator:
         )
         output = NarrativeOutput.model_validate(raw)
         self._validate_evidence_references(core_result, output)
+        self._validate_forbidden_claims(output)
         return output
 
     @staticmethod
@@ -63,3 +65,20 @@ class LLMNarrativeGenerator:
                     raise NarrativeValidationError(
                         f"{section_name} claim references unknown evidence IDs: {sorted(unknown)}"
                     )
+
+    @staticmethod
+    def _validate_forbidden_claims(output: NarrativeOutput) -> None:
+        blob = " ".join(
+            [
+                output.executive_summary,
+                output.market_structure,
+                output.final_conclusion,
+                *output.bullish_case,
+                *output.bearish_case,
+                *output.conflict_analysis,
+                *output.risk_summary,
+                *output.invalidation_summary,
+            ]
+        )
+        if _FORBIDDEN_CLAIMS.search(blob):
+            raise NarrativeValidationError("narrative treats confidence as a win probability or return promise")

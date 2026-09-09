@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from dragonboat_ai.futures_agent.domain.enums import OpportunityAction
+from dragonboat_ai.futures_agent.domain.enums import DirectionLabel, OpportunityAction
 from dragonboat_ai.futures_agent.domain.models import (
     AnalysisRequest,
     AnalysisVersions,
+    DirectionAssessment,
     FuturesMarketAnalysis,
 )
 from dragonboat_ai.futures_agent.features.engine import ReferenceFeatureEngine
@@ -27,6 +29,9 @@ from dragonboat_ai.futures_agent.scoring.risk_engine import RiskEngine
 
 
 class FuturesMarketAnalyst:
+    _narrative_slots = threading.BoundedSemaphore(2)
+    narrative_timeout_seconds = 10.0
+
     def __init__(
         self,
         *,
@@ -62,13 +67,13 @@ class FuturesMarketAnalyst:
         base_versions = versions or AnalysisVersions(
             schema_version="1.0.0",
             data_version="point_in_time_v1",
-            feature_set_version="futures_features_v1_1",
+            feature_set_version=ReferenceFeatureEngine.FEATURE_SET_VERSION,
             factor_model_version="futures_factors_v1",
             score_config_version="futures_scores_v1",
             score_config_hash=config_hash,
             regime_rule_version="futures_regime_v1",
             prompt_version="template_narrative_v1",
-            code_commit=None,
+            code_commit=self._artifact_hash(),
         )
         if base_versions.score_config_hash not in {"", config_hash}:
             raise ValueError(
@@ -86,20 +91,35 @@ class FuturesMarketAnalyst:
         version_hash = self._version_hash(self.versions)
         context = self.context_builder.build(canonical_request)
 
+        cached = None
         if not request.force_refresh:
             cached = self.analysis_repository.find_cached(
                 request_hash=request_hash,
                 input_data_hash=context.input_data_hash,
                 version_hash=version_hash,
             )
-            if cached is not None:
-                return cached
+        if cached is not None:
+            if canonical_request.include_narrative and cached.narrative is None:
+                narrative = self._narrative(cached)
+                cached = cached.model_copy(update={"narrative": narrative})
+                return self.analysis_repository.save(cached, version_hash=version_hash)
+            if not canonical_request.include_narrative and cached.narrative is not None:
+                return cached.model_copy(update={"narrative": None})
+            return cached
 
         data_quality = self.data_quality_evaluator.assess(context)
         metrics = self.feature_engine.compute(context)
         factors, evidence = self.factor_engine.score(context, metrics)
         regime = self.regime_classifier.classify(factors, metrics)
         direction = self.direction_engine.assess(canonical_request.horizon, factors)
+        if data_quality.blocking_issues:
+            direction = DirectionAssessment(
+                horizon=canonical_request.horizon,
+                score=None,
+                label=DirectionLabel.INSUFFICIENT_DATA,
+                available_factor_weight=direction.available_factor_weight,
+                factor_scores=direction.factor_scores,
+            )
         confidence = self.confidence_engine.assess(
             as_of=canonical_request.as_of,
             factors=factors,
@@ -136,6 +156,8 @@ class FuturesMarketAnalyst:
 
         generated_at = datetime.now(timezone.utc)
         core = FuturesMarketAnalysis(
+            data_mode=getattr(context, "data_mode", "estimated"),
+            production_ready=False,
             analysis_id=str(uuid4()),
             request_hash=request_hash,
             input_data_hash=context.input_data_hash,
@@ -160,27 +182,61 @@ class FuturesMarketAnalyst:
         )
         core = core.model_copy(update={"core_result_hash": self._core_hash(core)})
 
+        core = self.analysis_repository.save(core, version_hash=version_hash)
+        factory = getattr(self.analysis_repository, "session_factory", None)
+        if factory is not None:
+            from dragonboat_ai.futures_agent.invalidation.service import record_analysis_observation
+            record_analysis_observation(factory, core)
         if canonical_request.include_narrative:
-            try:
-                narrative = self.narrative_generator.generate(core)
-            except Exception:
-                narrative = TemplateNarrativeGenerator().generate(core)
+            narrative = self._narrative(core)
             core = core.model_copy(update={"narrative": narrative})
 
         return self.analysis_repository.save(core, version_hash=version_hash)
+
+    def _narrative(self, core):
+        fallback = TemplateNarrativeGenerator()
+        if isinstance(self.narrative_generator, TemplateNarrativeGenerator):
+            return self.narrative_generator.generate(core)
+        if not self._narrative_slots.acquire(blocking=False):
+            return fallback.generate(core)
+        completed = threading.Event()
+        result = []
+        def generate():
+            try:
+                result.append(self.narrative_generator.generate(core))
+            except Exception:
+                pass
+            finally:
+                self._narrative_slots.release()
+                completed.set()
+        threading.Thread(target=generate, daemon=True, name="futures-narrative").start()
+        if completed.wait(self.narrative_timeout_seconds) and result:
+            return result[0]
+        return fallback.generate(core)
+
+    @staticmethod
+    def _artifact_hash() -> str:
+        # Include dirty source, not merely git HEAD. No credentials or data files.
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        digest = hashlib.sha256()
+        for path in sorted(root.rglob("*.py")):
+            digest.update(str(path.relative_to(root)).encode())
+            digest.update(path.read_bytes())
+        return "sha256:" + digest.hexdigest()
 
     @staticmethod
     def _request_hash(request: AnalysisRequest) -> str:
         payload = request.model_dump(
             mode="json",
-            exclude={"force_refresh"},
+            exclude={"force_refresh", "include_narrative"},
         )
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
     @staticmethod
     def _version_hash(versions: AnalysisVersions) -> str:
-        payload = versions.model_dump(mode="json")
+        payload = versions.model_dump(mode="json", exclude={"prompt_version"})
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()
 
@@ -190,5 +246,12 @@ class FuturesMarketAnalyst:
             mode="json",
             exclude={"analysis_id", "generated_at", "narrative", "core_result_hash"},
         )
+        request_payload = payload.get("request")
+        if isinstance(request_payload, dict):
+            request_payload.pop("include_narrative", None)
+            request_payload.pop("force_refresh", None)
+        versions_payload = payload.get("versions")
+        if isinstance(versions_payload, dict):
+            versions_payload.pop("prompt_version", None)
         raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(raw).hexdigest()

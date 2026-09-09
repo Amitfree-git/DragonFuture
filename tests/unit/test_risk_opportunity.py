@@ -103,6 +103,7 @@ def test_bullish_but_overextended_waits_for_pullback() -> None:
             "volatility_percentile": metric("volatility_percentile", 55),
             "liquidity_quality_score": metric("liquidity_quality_score", 85),
             "roll_risk_score": metric("roll_risk_score", 0),
+            "price_limit_proximity_risk": metric("price_limit_proximity_risk", 0),
         },
         data_quality=data_quality(),
     )
@@ -119,3 +120,48 @@ def test_bullish_but_overextended_waits_for_pullback() -> None:
     )
     assert result.action.value == "wait_for_pullback"
     assert result.entry_quality < 30
+
+
+def test_missing_atr_blocks_entry_even_with_strong_direction() -> None:
+    direction = DirectionAssessment(
+        horizon=AnalysisHorizon.SWING,
+        score=75,
+        label=DirectionLabel.STRONG_BULLISH,
+        available_factor_weight=100,
+        factor_scores={},
+    )
+    confidence = ConfidenceAssessment(
+        score=80,
+        data_coverage=100,
+        freshness=95,
+        factor_agreement=80,
+        data_quality=90,
+    )
+    regime = MarketRegime(
+        primary="strong_bull_trend",
+        volatility_regime="normal",
+        liquidity_regime="high",
+        regime_confidence=80,
+    )
+    risk = RiskEngine().assess(
+        context=context(120),
+        metrics={
+            "volatility_percentile": metric("volatility_percentile", 55),
+            "liquidity_quality_score": metric("liquidity_quality_score", 85),
+            "roll_risk_score": metric("roll_risk_score", 0),
+            "price_limit_proximity_risk": metric("price_limit_proximity_risk", 0),
+        },
+        data_quality=data_quality(),
+    )
+    result = OpportunityEngine().assess(
+        direction=direction,
+        regime=regime,
+        risk=risk,
+        confidence=confidence,
+        metrics={
+            "rsi_14": metric("rsi_14", 82),
+            "liquidity_quality_score": metric("liquidity_quality_score", 85),
+        },
+    )
+    assert result.action.value == "no_trade"
+    assert "missing_entry_atr" in result.hard_gate_reasons

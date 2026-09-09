@@ -132,7 +132,7 @@ class RiskEngine:
             ("price_limit_proximity_risk", "unknown_price_limit_risk", "涨跌停"),
         ):
             metric = metrics.get(name)
-            if metric is None or self._usable(metric):
+            if metric is not None and self._usable(metric):
                 continue
             items.append(
                 RiskItem(
@@ -141,7 +141,7 @@ class RiskEngine:
                     description=f"{label}关键风险输入缺失或无效，禁止形成交易候选。",
                     hard_gate=True,
                     observed_value=None,
-                    metric_ids=[metric.metric_id],
+                    metric_ids=[metric.metric_id] if metric is not None else [],
                 )
             )
 

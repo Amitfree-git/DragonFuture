@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
+import json
+import os
+import tempfile
+from uuid import uuid4
 from datetime import date, datetime, time
 from typing import Callable
 
@@ -33,6 +38,9 @@ class IngestReport:
     bars_skipped: int = 0
     bars_revised: int = 0
     bars_dropped_missing: int = 0
+    bars_partial_ohlc: int = 0
+    bars_with_price_limits: int = 0
+    bars_missing_price_limits: int = 0
     curves: int = 0
     manifest_id: str | None = None
     coverage: CoverageReport | None = None
@@ -79,8 +87,8 @@ class TushareMarketIngestor:
         end_date = parse_trade_date(end)
         report = IngestReport()
         manifest = self.manifests.create(
-            manifest_id=f"tushare-{product}-{exchange}-{start}-{end}-{self.clock().strftime('%Y%m%d%H%M%S')}",
-            source_policy="tushare_only",
+            manifest_id=f"tushare-{product}-{exchange}-{start}-{end}-{uuid4().hex}",
+            source_policy=getattr(self.source, "source_policy", "tushare_only"),
             data_mode="final_only",
             status=ManifestStatus.PENDING,
         )
@@ -118,7 +126,7 @@ class TushareMarketIngestor:
             response_hash=stable_payload_hash(contract_rows),
             received_at=self.clock(),
             license_id="tushare-env",
-            storage_uri=f"memory://fut_basic/{product}/{exchange}",
+            storage_uri=self._archive_response(contract_rows),
         )
         metas: list[ContractMeta] = []
         for row in contract_rows:
@@ -160,13 +168,38 @@ class TushareMarketIngestor:
                 response_hash=stable_payload_hash(rows),
                 received_at=self.clock(),
                 license_id="tushare-env",
-                storage_uri=f"memory://fut_daily/{meta.ts_code}/{start}/{end}",
+                storage_uri=self._archive_response(rows),
             )
+            from .price_limits import index_price_limits
+            fetch_limits = getattr(self.source, "fetch_price_limits", None)
+            limit_rows = self._retry(lambda ts=meta.ts_code: fetch_limits(ts_code=ts, start=start, end=end)) if callable(fetch_limits) else []
+            if callable(fetch_limits):
+                self.manifests.archive_raw(
+                    provider=TUSHARE_SOURCE,
+                    request_digest=stable_payload_hash({"api": "ft_limit", "ts_code": meta.ts_code, "start": start, "end": end}),
+                    response_hash=stable_payload_hash(limit_rows), received_at=self.clock(),
+                    license_id="tushare-env", storage_uri=self._archive_response(limit_rows),
+                )
+            limits = index_price_limits(limit_rows, ts_code=meta.ts_code, start=start_date, end=end_date)
             for row in rows:
                 bar = map_fut_daily_bar(row, contract_id=refs[meta.ts_code].contract_id)
                 if bar is None:
                     report.bars_dropped_missing += 1
                     continue
+                if any(value is None for value in (bar.open, bar.high, bar.low, bar.close)):
+                    report.bars_partial_ohlc += 1
+                receipt = self.clock()
+                limit = limits.get(bar.trading_date)
+                if limit is not None:
+                    raw_limit, upper, lower = limit
+                    bar = replace(bar, upper_limit=upper, lower_limit=lower,
+                                  payload_hash=stable_payload_hash({"fut_daily": row, "ft_limit": raw_limit}),
+                                  available_at=max(bar.available_at, receipt))
+                if bar.upper_limit is not None and bar.lower_limit is not None:
+                    report.bars_with_price_limits += 1
+                else:
+                    report.bars_missing_price_limits += 1
+                bar = replace(bar, received_at=receipt)
                 status = self.repository.ingest_daily_bar(
                     bar,
                     data_batch_id=batch_id,
@@ -235,6 +268,23 @@ class TushareMarketIngestor:
             contract_count=len(metas),
             notes=("tushare_final_only_no_historical_vintage",),
         )
+
+    def _archive_response(self, rows: list[dict]) -> str:
+        bind = self.repository.session_factory.kw.get("bind")
+        database_path = bind.url.database if bind is not None else None
+        if database_path and database_path != ":memory:":
+            directory = Path(database_path).resolve().parent / "raw_archive"
+            directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        else:
+            directory = Path(tempfile.mkdtemp(prefix="dragonfuture-raw-"))
+        response_hash = stable_payload_hash(rows)
+        path = directory / f"{response_hash}.json"
+        body = json.dumps(rows, ensure_ascii=False, sort_keys=True, default=str)
+        if not path.exists():
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(body)
+        return path.as_uri()
 
     def _retry(self, operation: Callable[[], list[dict]]) -> list[dict]:
         last_error: Exception | None = None

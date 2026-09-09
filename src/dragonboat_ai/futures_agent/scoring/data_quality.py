@@ -53,13 +53,23 @@ class DataQualityEvaluator:
         if future_timestamps:
             blocking.append("market_context_contains_data_not_available_at_as_of")
 
-        latest_times = [item.available_at for item in (*context.contract_bars, *context.continuous_bars)]
-        if latest_times:
-            age_days = (context.request.as_of - max(latest_times)).total_seconds() / 86400.0
-            if age_days > 7.0:
-                stale.append("daily_market_data")
-                warnings.append("latest_daily_market_data_is_older_than_7_days")
-        else:
+        dependencies = {
+            "continuous_series": context.continuous_bars,
+            "selected_contract": context.contract_bars,
+            "term_structure_curve": (context.current_curve,) if context.current_curve else (),
+        }
+        for source, observations in dependencies.items():
+            if not observations:
+                continue
+            # Check each dependency independently; a new correction does not make
+            # an old trading session fresh. The 7-day bound is conservative for
+            # this daily research service, not a production exchange calendar SLA.
+            latest = max(observations, key=lambda item: item.trading_date)
+            age = (context.request.as_of.date() - latest.trading_date).days
+            if age > 7:
+                stale.append(source)
+                blocking.append(f"stale_{source}")
+        if not context.contract_bars and not context.continuous_bars:
             blocking.append("no_daily_market_data")
 
         overall = coverage

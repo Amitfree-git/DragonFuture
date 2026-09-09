@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from dragonboat_ai.futures_agent.domain.exceptions import DataNotFoundError, PersistenceError
+from dragonboat_ai.futures_agent.domain.exceptions import DataNotFoundError, InsufficientDataError, PersistenceError
 from dragonboat_ai.futures_agent.domain.market_data import (
     ContractCandidate,
     ContractRef,
@@ -17,12 +19,15 @@ from dragonboat_ai.futures_agent.domain.market_data import (
     CurvePoint,
     CurveSnapshot,
     DailyBar,
+    EffectiveContractMapping,
     InstrumentRef,
 )
 from dragonboat_ai.futures_agent.domain.models import FuturesMarketAnalysis
+from dragonboat_ai.futures_agent.operations.events import build_published_event
 
 from .base import from_db_datetime, to_db_datetime
 from .models import (
+    FutActiveContractMappingORM,
     FutAnalysisAuditLogORM,
     FutAnalysisEvidenceORM,
     FutAnalysisRunORM,
@@ -32,18 +37,31 @@ from .models import (
     FutCurvePointORM,
     FutCurveSnapshotORM,
     FutDataBatchORM,
+    FutEventOutboxORM,
     FutFactorSnapshotORM,
     FutFeatureSnapshotORM,
     FutFeatureValueORM,
     FutInstrumentORM,
     FutInvalidationRuleORM,
     FutRollEventORM,
+    FutSeriesSnapshotORM,
 )
 
 
 class SqlAlchemyMarketDataRepository:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self.session_factory = session_factory
+
+    @contextmanager
+    def read_snapshot(self):
+        """Bind all context reads to one SQLite MVCC read transaction."""
+        bind = self.session_factory.kw["bind"]
+        with bind.connect() as connection:
+            connection.exec_driver_sql("BEGIN")
+            try:
+                yield type(self)(sessionmaker(bind=connection, expire_on_commit=False))
+            finally:
+                connection.rollback()
 
     def get_or_create_instrument(
         self,
@@ -181,6 +199,13 @@ class SqlAlchemyMarketDataRepository:
                 )
             )
 
+    @staticmethod
+    def _batch_can_deduplicate(session, existing_batch_id, current_batch_id) -> bool:
+        if existing_batch_id is None or existing_batch_id == current_batch_id:
+            return True
+        batch = session.get(FutDataBatchORM, existing_batch_id)
+        return batch is not None and batch.status == "committed"
+
     def ingest_daily_bar(
         self,
         bar: DailyBar,
@@ -200,7 +225,10 @@ class SqlAlchemyMarketDataRepository:
                 .order_by(FutBarDailyORM.revision_no.desc())
                 .limit(1)
             )
-            if existing is not None and existing.payload_hash == bar.payload_hash:
+            if (existing is not None and existing.payload_hash == bar.payload_hash
+                    and all(getattr(existing, field + "_price") == getattr(bar, field)
+                            for field in ("open", "high", "low", "close"))
+                    and self._batch_can_deduplicate(session, existing.data_batch_id, batch_id)):
                 return "skipped"
             if existing is None:
                 revision_no = bar.revision_no
@@ -253,7 +281,8 @@ class SqlAlchemyMarketDataRepository:
                 .order_by(FutCurveSnapshotORM.revision_no.desc())
                 .limit(1)
             )
-            if existing is not None and existing.input_hash == snapshot.input_hash:
+            if (existing is not None and existing.input_hash == snapshot.input_hash
+                    and self._batch_can_deduplicate(session, existing.data_batch_id, data_batch_id)):
                 return "skipped"
             if existing is None:
                 revision_no = 1
@@ -305,6 +334,16 @@ class SqlAlchemyMarketDataRepository:
         calculation_version: str = "continuous_v1",
     ) -> None:
         with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutContinuousBarDailyORM).where(
+                    FutContinuousBarDailyORM.instrument_id == bar.instrument_id,
+                    FutContinuousBarDailyORM.series_type == series_type,
+                    FutContinuousBarDailyORM.trading_date == bar.trading_date,
+                    FutContinuousBarDailyORM.calculation_version == calculation_version,
+                )
+            )
+            if existing is not None:
+                return
             session.add(
                 FutContinuousBarDailyORM(
                     instrument_id=bar.instrument_id,
@@ -313,6 +352,7 @@ class SqlAlchemyMarketDataRepository:
                     source_contract_id=bar.source_contract_id,
                     raw_settlement=bar.raw_settlement,
                     adjusted_settlement=bar.adjusted_settlement,
+                    research_index=bar.research_index,
                     adjustment_method=adjustment_method,
                     cumulative_adjustment=bar.adjustment_value,
                     roll_flag=bar.roll_flag,
@@ -399,6 +439,41 @@ class SqlAlchemyMarketDataRepository:
             rows = list(reversed(session.execute(stmt).all()))
             return tuple(self._daily_bar(row, code) for row, code in rows)
 
+    def curve_visibility_times(self, *, instrument_id: int, as_of: datetime) -> tuple[datetime, ...]:
+        stmt = (select(FutCurveSnapshotORM.available_at)
+            .outerjoin(FutDataBatchORM, FutCurveSnapshotORM.data_batch_id == FutDataBatchORM.batch_id)
+            .where(FutCurveSnapshotORM.instrument_id == instrument_id,
+                   FutCurveSnapshotORM.available_at <= to_db_datetime(as_of),
+                   or_(FutCurveSnapshotORM.data_batch_id.is_(None), FutDataBatchORM.status == "committed"))
+            .distinct().order_by(FutCurveSnapshotORM.available_at))
+        with self.session_factory() as session:
+            return tuple(from_db_datetime(value) for value in session.scalars(stmt))
+
+    def _visible_series_snapshot(self, *, instrument_id: int, as_of: datetime,
+                                 calculation_version: str = "continuous_v1"):
+        stmt = (select(FutSeriesSnapshotORM)
+            .where(FutSeriesSnapshotORM.instrument_id == instrument_id,
+                   FutSeriesSnapshotORM.calculation_version == calculation_version,
+                   FutSeriesSnapshotORM.available_at <= to_db_datetime(as_of),
+                   FutSeriesSnapshotORM.payload_json.is_not(None))
+            .order_by(FutSeriesSnapshotORM.available_at.desc(), FutSeriesSnapshotORM.created_at.desc())
+            .limit(1))
+        with self.session_factory() as session:
+            return session.scalar(stmt)
+
+    def validate_series_inputs(self, *, instrument_id: int, as_of: datetime,
+                               curves: tuple[CurveSnapshot, ...], calculation_version: str = "continuous_v1") -> None:
+        vintage = self._visible_series_snapshot(instrument_id=instrument_id, as_of=as_of,
+                                                calculation_version=calculation_version)
+        if vintage is None:
+            return
+        # Validate the complete dependency history, not only the feature window.
+        complete = self.load_curve_snapshots(instrument_id=instrument_id, as_of=as_of, limit=100000)
+        current = [[c.snapshot_id, c.input_hash, c.available_at.isoformat()] for c in complete]
+        expected = vintage.payload_json["inputs"]
+        if current != expected:
+            raise InsufficientDataError("series_rebuild_required: visible curves differ from the causal series inputs")
+
     def load_continuous_bars(
         self,
         *,
@@ -407,6 +482,20 @@ class SqlAlchemyMarketDataRepository:
         limit: int = 500,
         calculation_version: str = "continuous_v1",
     ) -> tuple[ContinuousBar, ...]:
+        vintage = self._visible_series_snapshot(instrument_id=instrument_id, as_of=as_of,
+                                                calculation_version=calculation_version)
+        if vintage is not None:
+            return tuple(ContinuousBar(
+                instrument_id=instrument_id, symbol=vintage.payload_json["symbol"],
+                trading_date=date.fromisoformat(point["trading_date"]),
+                source_contract_id=point["source_contract_id"], source_contract=point["source_contract"],
+                raw_settlement=Decimal(point["raw_settlement"]),
+                adjusted_settlement=Decimal(point["adjusted_settlement"]),
+                adjustment_value=Decimal(point["adjustment_value"]), roll_flag=point["roll_flag"],
+                available_at=from_db_datetime(vintage.available_at),
+                input_hash=vintage.input_hash, series_snapshot_id=vintage.snapshot_id,
+                research_index=Decimal(point["research_index"]) if point["research_index"] is not None else None,
+            ) for point in vintage.payload_json["points"][-limit:])
         stmt = (
             select(FutContinuousBarDailyORM, FutContractORM.contract_code, FutInstrumentORM.symbol)
             .join(FutContractORM, FutContinuousBarDailyORM.source_contract_id == FutContractORM.contract_id)
@@ -430,6 +519,7 @@ class SqlAlchemyMarketDataRepository:
                     source_contract=contract_code,
                     raw_settlement=row.raw_settlement,
                     adjusted_settlement=row.adjusted_settlement,
+                    research_index=row.research_index,
                     adjustment_value=row.cumulative_adjustment,
                     roll_flag=row.roll_flag,
                     available_at=from_db_datetime(row.available_at),
@@ -557,6 +647,10 @@ class SqlAlchemyMarketDataRepository:
         instrument_id: int,
         as_of: datetime,
     ) -> date | None:
+        vintage = self._visible_series_snapshot(instrument_id=instrument_id, as_of=as_of)
+        if vintage is not None:
+            return max((date.fromisoformat(p["trading_date"]) for p in vintage.payload_json["points"]
+                        if p["roll_flag"]), default=None)
         stmt = select(func.max(FutRollEventORM.effective_date)).where(
             FutRollEventORM.instrument_id == instrument_id,
             FutRollEventORM.effective_date <= as_of.date(),
@@ -564,6 +658,168 @@ class SqlAlchemyMarketDataRepository:
         )
         with self.session_factory() as session:
             return session.scalar(stmt)
+
+    def save_contract_mapping(
+        self,
+        *,
+        mapping_id: str,
+        instrument_id: int,
+        to_contract_id: int | None,
+        decision_date: date,
+        effective_session: date | None,
+        action: str,
+        available_at: datetime,
+        policy_version: str = "main_contract_v1",
+        from_contract_id: int | None = None,
+        challenger_streak: int = 0,
+        evidence: dict[str, Any] | None = None,
+    ) -> None:
+        with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutActiveContractMappingORM).where(
+                    FutActiveContractMappingORM.instrument_id == instrument_id,
+                    FutActiveContractMappingORM.decision_date == decision_date,
+                    FutActiveContractMappingORM.policy_version == policy_version,
+                )
+            )
+            if existing is not None:
+                return
+            session.add(
+                FutActiveContractMappingORM(
+                    mapping_id=mapping_id,
+                    instrument_id=instrument_id,
+                    from_contract_id=from_contract_id,
+                    to_contract_id=to_contract_id,
+                    decision_date=decision_date,
+                    effective_session=effective_session,
+                    action=action,
+                    challenger_streak=challenger_streak,
+                    policy_version=policy_version,
+                    available_at=to_db_datetime(available_at),
+                    evidence_json=evidence,
+                )
+            )
+
+    def save_roll_event(
+        self,
+        *,
+        instrument_id: int,
+        from_contract_id: int,
+        to_contract_id: int,
+        decision_date: date,
+        effective_date: date,
+        from_settlement,
+        to_settlement,
+        adjustment_value,
+        available_at: datetime,
+        roll_rule_version: str = "main_contract_v1",
+    ) -> None:
+        with self.session_factory.begin() as session:
+            existing = session.scalar(
+                select(FutRollEventORM).where(
+                    FutRollEventORM.instrument_id == instrument_id,
+                    FutRollEventORM.effective_date == effective_date,
+                    FutRollEventORM.roll_rule_version == roll_rule_version,
+                )
+            )
+            if existing is not None:
+                return
+            session.add(
+                FutRollEventORM(
+                    instrument_id=instrument_id,
+                    from_contract_id=from_contract_id,
+                    to_contract_id=to_contract_id,
+                    decision_date=decision_date,
+                    effective_date=effective_date,
+                    from_settlement=from_settlement,
+                    to_settlement=to_settlement,
+                    adjustment_value=adjustment_value,
+                    roll_rule_version=roll_rule_version,
+                    available_at=to_db_datetime(available_at),
+                )
+            )
+
+    def save_series_snapshot(
+        self,
+        *,
+        snapshot_id: str,
+        instrument_id: int,
+        series_type: str,
+        calculation_version: str,
+        input_hash: str,
+        available_at: datetime | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        with self.session_factory.begin() as session:
+            existing = session.get(FutSeriesSnapshotORM, snapshot_id)
+            if existing is not None:
+                if (existing.input_hash != input_hash
+                        or (payload is not None and existing.payload_json != json.loads(json.dumps(payload)))
+                        or (available_at is not None and existing.available_at != to_db_datetime(available_at))):
+                    raise ValueError(f"chart series snapshot {snapshot_id} is immutable")
+                return
+            session.add(
+                FutSeriesSnapshotORM(
+                    snapshot_id=snapshot_id,
+                    instrument_id=instrument_id,
+                    series_type=series_type,
+                    calculation_version=calculation_version,
+                    input_hash=input_hash,
+                    available_at=to_db_datetime(available_at) if available_at else None,
+                    payload_json=payload,
+                )
+            )
+
+    def load_effective_mapping(
+        self,
+        *,
+        instrument_id: int,
+        session_date: date,
+        as_of: datetime,
+    ) -> EffectiveContractMapping | None:
+        vintage = self._visible_series_snapshot(instrument_id=instrument_id, as_of=as_of)
+        if vintage is not None:
+            eligible = [m for m in vintage.payload_json["mappings"]
+                        if date.fromisoformat(m["effective_session"]) <= session_date]
+            if not eligible:
+                return None
+            item = max(eligible, key=lambda m: (m["effective_session"], m["decision_date"]))
+            with self.session_factory() as session:
+                contract = session.get(FutContractORM, item["to_contract_id"]) if item["to_contract_id"] else None
+                instrument = session.get(FutInstrumentORM, instrument_id)
+                return EffectiveContractMapping(
+                    contract=self._contract_ref(contract, instrument) if contract else None,
+                    decision_date=date.fromisoformat(item["decision_date"]),
+                    effective_session=date.fromisoformat(item["effective_session"]),
+                    action=item["action"], policy_version=item["policy_version"],
+                )
+        stmt = (
+            select(FutActiveContractMappingORM, FutContractORM, FutInstrumentORM)
+            .outerjoin(FutContractORM, FutActiveContractMappingORM.to_contract_id == FutContractORM.contract_id)
+            .join(FutInstrumentORM, FutActiveContractMappingORM.instrument_id == FutInstrumentORM.instrument_id)
+            .where(
+                FutActiveContractMappingORM.instrument_id == instrument_id,
+                func.coalesce(FutActiveContractMappingORM.effective_session, FutActiveContractMappingORM.decision_date) <= session_date,
+                FutActiveContractMappingORM.available_at <= to_db_datetime(as_of),
+            )
+            .order_by(
+                func.coalesce(FutActiveContractMappingORM.effective_session, FutActiveContractMappingORM.decision_date).desc(),
+                FutActiveContractMappingORM.decision_date.desc(),
+            )
+            .limit(1)
+        )
+        with self.session_factory() as session:
+            row = session.execute(stmt).first()
+            if row is None:
+                return None
+            mapping, contract, instrument = row
+            return EffectiveContractMapping(
+                contract=self._contract_ref(contract, instrument) if contract is not None else None,
+                decision_date=mapping.decision_date,
+                effective_session=mapping.effective_session or mapping.decision_date,
+                action=mapping.action,
+                policy_version=mapping.policy_version,
+            )
 
     @staticmethod
     def _contract_ref(row: FutContractORM, instrument: FutInstrumentORM) -> ContractRef:
@@ -638,14 +894,29 @@ class SqlAlchemyAnalysisRepository:
             row = session.get(FutAnalysisRunORM, analysis_id)
             return self._to_domain(row) if row else None
 
-    def latest(self, symbol: str, horizon: str) -> FuturesMarketAnalysis | None:
+    def latest(
+        self,
+        symbol: str,
+        horizon: str,
+        *,
+        exchange: str | None = None,
+        contract: str | None = None,
+        as_of: datetime | None = None,
+    ) -> FuturesMarketAnalysis | None:
+        filters = [
+            FutAnalysisRunORM.symbol == symbol.upper(),
+            FutAnalysisRunORM.horizon == horizon,
+            FutAnalysisRunORM.status == "completed",
+        ]
+        if exchange:
+            filters.append(FutAnalysisRunORM.exchange == exchange.upper())
+        if contract:
+            filters.append(FutAnalysisRunORM.contract_code == contract.upper())
+        if as_of is not None:
+            filters.append(FutAnalysisRunORM.as_of <= to_db_datetime(as_of))
         stmt = (
             select(FutAnalysisRunORM)
-            .where(
-                FutAnalysisRunORM.symbol == symbol.upper(),
-                FutAnalysisRunORM.horizon == horizon,
-                FutAnalysisRunORM.status == "completed",
-            )
+            .where(*filters)
             .order_by(FutAnalysisRunORM.as_of.desc(), FutAnalysisRunORM.created_at.desc())
             .limit(1)
         )
@@ -660,6 +931,10 @@ class SqlAlchemyAnalysisRepository:
         version_hash: str,
     ) -> FuturesMarketAnalysis:
         with self.session_factory.begin() as session:
+            # Acquire the SQLite writer slot before checking identities. Two
+            # identical requests must not race to insert the same feature row.
+            from sqlalchemy import text
+            session.execute(text("BEGIN IMMEDIATE"))
             instrument_stmt = select(FutInstrumentORM).where(
                 FutInstrumentORM.symbol == analysis.request.symbol
             )
@@ -690,7 +965,14 @@ class SqlAlchemyAnalysisRepository:
                 )
             )
             if existing is not None:
-                return self._to_domain(existing)
+                if analysis.narrative is not None and existing.narrative_json is None:
+                    existing.narrative_json = analysis.narrative.model_dump(mode="json")
+                    session.flush()
+                    return self._to_domain(existing)
+                restored = self._to_domain(existing)
+                if analysis.narrative is None:
+                    return restored.model_copy(update={"narrative": None}) if restored else restored
+                return restored
 
             feature_snapshot_id = self._persist_feature_and_factor_snapshots(
                 session=session,
@@ -770,6 +1052,17 @@ class SqlAlchemyAnalysisRepository:
                     },
                 )
             )
+            event = build_published_event(analysis)
+            session.add(
+                FutEventOutboxORM(
+                    event_id=event["event_id"],
+                    event_type=event["event_type"],
+                    analysis_id=analysis.analysis_id,
+                    payload_json=event,
+                    status="pending",
+                    available_at=to_db_datetime(analysis.generated_at),
+                )
+            )
         return analysis
 
     @staticmethod
@@ -828,7 +1121,7 @@ class SqlAlchemyAnalysisRepository:
                         percentile=metric.percentile,
                         normalized_score=metric.normalized_score,
                         lookback_window=metric.lookback,
-                        observation_count=None,
+                        observation_count=metric.valid_n,
                         quality_score=metric.quality_score,
                         status=metric.status.value,
                         source_reference=metric.source,

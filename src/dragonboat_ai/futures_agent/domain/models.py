@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -45,7 +46,9 @@ class AnalysisRequest(DomainModel):
     def require_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
-        return value
+        # All currently supported exchanges share this market timezone.
+        # Canonicalize the instant before deriving trading dates or hashes.
+        return value.astimezone(ZoneInfo("Asia/Shanghai"))
 
 
 class MetricObservation(DomainModel):
@@ -65,6 +68,11 @@ class MetricObservation(DomainModel):
     source: str
     quality_score: UnsignedScore = 100.0
     status: DataStatus = DataStatus.OK
+    valid_n: int | None = None
+    window_start: date | None = None
+    window_end: date | None = None
+    lineage_id: str | None = None
+    series_type: str | None = None
 
     @field_validator("observation_time", "available_at")
     @classmethod
@@ -80,6 +88,7 @@ class FeatureContribution(DomainModel):
     weight: float = Field(gt=0.0, le=1.0)
     weighted_contribution: float
     metric_ids: list[str] = Field(default_factory=list)
+    lineage_id: str | None = None
 
 
 class Evidence(DomainModel):
@@ -125,9 +134,10 @@ class ConfidenceAssessment(DomainModel):
     score: UnsignedScore
     data_coverage: UnsignedScore
     freshness: UnsignedScore
-    factor_agreement: UnsignedScore
+    factor_agreement: UnsignedScore | None = None
     data_quality: UnsignedScore
     historical_calibration: UnsignedScore | None = None
+    interpretation: str = "evidence_quality_not_win_probability"
 
 
 class RiskItem(DomainModel):
@@ -205,6 +215,8 @@ class NarrativeOutput(DomainModel):
 
 
 class FuturesMarketAnalysis(DomainModel):
+    data_mode: str = "unknown"
+    production_ready: bool = False
     analysis_id: str
     request_hash: str
     input_data_hash: str

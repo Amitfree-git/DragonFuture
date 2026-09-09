@@ -120,6 +120,29 @@ def test_map_fut_daily_leaves_missing_limits_as_none() -> None:
     assert bar.source == "tushare"
 
 
+def test_map_fut_daily_preserves_null_ohlc_on_zero_volume() -> None:
+    row = dict(RB2701_DAILY)
+    row["vol"] = 0
+    row["open"] = None
+    row["high"] = None
+    row["low"] = None
+    row["close"] = None
+    bar = map_fut_daily_bar(row, contract_id=7)
+    assert bar is not None
+    assert bar.volume == 0
+    assert bar.settlement == Decimal("3160")
+    assert bar.open is bar.high is bar.low is bar.close is None
+
+
+def test_map_fut_daily_retains_partial_bar_when_volume_traded() -> None:
+    row = dict(RB2701_DAILY)
+    row["open"] = None
+    bar = map_fut_daily_bar(row, contract_id=7)
+    assert bar is not None
+    assert bar.open is None
+    assert bar.settlement == Decimal("3160")
+
+
 def test_missing_settlement_is_not_coerced_to_zero() -> None:
     row = dict(RB2701_DAILY)
     row["settle"] = None

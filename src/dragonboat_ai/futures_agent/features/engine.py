@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import math
 import statistics
-from datetime import datetime, time, timezone
+from dataclasses import dataclass
+from datetime import date, datetime, time, timezone
 
 from dragonboat_ai.futures_agent.domain.enums import DataStatus
-from dragonboat_ai.futures_agent.domain.market_data import CurveSnapshot, MarketContext
+from dragonboat_ai.futures_agent.domain.market_data import CurvePoint, CurveSnapshot, MarketContext
 from dragonboat_ai.futures_agent.domain.models import MetricObservation
 
 from .normalization import clip, percentile_to_signed_score, tanh_score
+from .registry import FEATURES_BY_NAME, require_compatible_series
 from .statistics import (
     average_true_range_pct,
     breakout_position,
@@ -25,6 +27,14 @@ from .statistics import (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _CurveShape:
+    slope: float | None
+    curvature: float | None
+    pair_id: str | None
+    tenor_key: str | None
+
+
 class ReferenceFeatureEngine:
     """Pure-Python deterministic daily feature implementation for V1.
 
@@ -32,20 +42,30 @@ class ReferenceFeatureEngine:
     weather and discretionary LLM inputs are excluded from this layer.
     """
 
-    FEATURE_SET_VERSION = "futures_features_v1_1"
+    FEATURE_SET_VERSION = "futures_features_v1_3"
 
     def compute(self, context: MarketContext) -> dict[str, MetricObservation]:
         metrics: dict[str, MetricObservation] = {}
         continuous = sorted(context.continuous_bars, key=lambda item: item.trading_date)
         contract_bars = sorted(context.contract_bars, key=lambda item: item.trading_date)
 
-        prices = [float(item.adjusted_settlement) for item in continuous]
+        # Missing research lineage is not a license to relabel a chart series.
+        research_values = [item.research_index for item in continuous]
+        last_break = max((i for i, value in enumerate(research_values) if value is None), default=-1)
+        prices = [float(value) for value in research_values[last_break + 1:] if value is not None]
         contract_prices = [float(item.settlement) for item in contract_bars]
-        latest_available_at = max(
-            [item.available_at for item in continuous]
-            + [item.available_at for item in contract_bars],
+        explicit_contract = context.contract_selection_reason == "explicit_contract_request"
+        position_prices = contract_prices
+        position_source = "selected_contract"
+        continuous_available_at = max(
+            (item.available_at for item in continuous),
             default=context.request.as_of,
         )
+        contract_available_at = max(
+            (item.available_at for item in contract_bars),
+            default=context.request.as_of,
+        )
+        position_available_at = contract_available_at
         latest_date = (
             continuous[-1].trading_date
             if continuous
@@ -72,25 +92,29 @@ class ReferenceFeatureEngine:
                 unit="ratio",
                 normalized_score=normalized,
                 observation_time=observation_time,
-                available_at=latest_available_at,
+                available_at=continuous_available_at,
                 lookback=period,
-                source="continuous_back_adjusted",
+                source="research_index",
                 sample_size=len(prices),
                 minimum_sample=period + 1,
             )
 
         ma20 = simple_moving_average(prices, 20)
         ma60 = simple_moving_average(prices, 60)
-        latest_price = prices[-1] if prices else None
+        position_ma20 = simple_moving_average(position_prices, 20)
+        position_ma60 = simple_moving_average(position_prices, 60)
+        latest_price = position_prices[-1] if position_prices else None
         atr_pct = average_true_range_pct(contract_bars, 20)
-        fallback_range = daily_vol * math.sqrt(5.0) if daily_vol else None
-        range_unit = atr_pct or fallback_range
+        range_unit = atr_pct
 
-        settlement_vs_ma20 = self._relative_distance(latest_price, ma20)
-        settlement_vs_ma60 = self._relative_distance(latest_price, ma60)
+        settlement_vs_ma20 = self._relative_distance(latest_price, position_ma20)
+        settlement_vs_ma60 = self._relative_distance(
+            latest_price,
+            position_ma60,
+        )
         extension_atr = (
-            settlement_vs_ma20 / range_unit
-            if settlement_vs_ma20 is not None and range_unit and range_unit > 0
+            (latest_price - position_ma20) / (range_unit * latest_price)
+            if latest_price is not None and latest_price > 0 and position_ma20 is not None and range_unit and range_unit > 0
             else None
         )
 
@@ -101,10 +125,10 @@ class ReferenceFeatureEngine:
             unit="ratio",
             normalized_score=tanh_score(extension_atr, 2.0) if extension_atr is not None else None,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=position_available_at,
             lookback=20,
-            source="continuous_back_adjusted",
-            sample_size=len(prices),
+            source=position_source,
+            sample_size=len(position_prices),
             minimum_sample=20,
         )
         metrics["settlement_vs_ma60"] = self._observation(
@@ -118,10 +142,10 @@ class ReferenceFeatureEngine:
                 else None
             ),
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=position_available_at,
             lookback=60,
-            source="continuous_back_adjusted",
-            sample_size=len(prices),
+            source=position_source,
+            sample_size=len(position_prices),
             minimum_sample=60,
         )
         metrics["extension_atr"] = self._observation(
@@ -131,10 +155,10 @@ class ReferenceFeatureEngine:
             unit="atr",
             normalized_score=tanh_score(extension_atr, 2.0) if extension_atr is not None else None,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=contract_available_at,
             lookback=20,
-            source="continuous_back_adjusted+selected_contract",
-            sample_size=min(len(prices), len(contract_bars)),
+            source=position_source,
+            sample_size=min(len(position_prices), len(contract_bars)),
             minimum_sample=21,
         )
 
@@ -146,9 +170,9 @@ class ReferenceFeatureEngine:
             unit="score",
             normalized_score=ma_structure,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=continuous_available_at,
             lookback=60,
-            source="continuous_back_adjusted",
+            source="research_index",
             sample_size=len(prices),
             minimum_sample=65,
         )
@@ -161,9 +185,9 @@ class ReferenceFeatureEngine:
             unit="ratio",
             normalized_score=clip(200.0 * (breakout - 0.5), -100.0, 100.0) if breakout is not None else None,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=continuous_available_at,
             lookback=120,
-            source="continuous_back_adjusted",
+            source="research_index",
             sample_size=len(prices),
             minimum_sample=120,
         )
@@ -176,9 +200,9 @@ class ReferenceFeatureEngine:
             unit="index",
             normalized_score=clip((rsi14 - 50.0) * 2.0, -100.0, 100.0) if rsi14 is not None else None,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=continuous_available_at,
             lookback=14,
-            source="continuous_back_adjusted",
+            source="research_index",
             sample_size=len(prices),
             minimum_sample=15,
         )
@@ -196,9 +220,9 @@ class ReferenceFeatureEngine:
             unit="ratio",
             normalized_score=acceleration_score,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=continuous_available_at,
             lookback=20,
-            source="continuous_back_adjusted",
+            source="research_index",
             sample_size=len(prices),
             minimum_sample=21,
         )
@@ -208,7 +232,7 @@ class ReferenceFeatureEngine:
             context=context,
             contract_prices=contract_prices,
             observation_time=observation_time,
-            available_at=latest_available_at,
+            available_at=contract_available_at,
             daily_vol=daily_vol,
         )
         self._add_curve_metrics(metrics, context)
@@ -219,10 +243,10 @@ class ReferenceFeatureEngine:
             rv20,
             rv60,
             observation_time,
-            latest_available_at,
+            continuous_available_at,
         )
-        self._add_liquidity_metrics(metrics, context, observation_time, latest_available_at)
-        self._add_roll_and_limit_metrics(metrics, context, observation_time, latest_available_at)
+        self._add_liquidity_metrics(metrics, context, observation_time, contract_available_at)
+        self._add_roll_and_limit_metrics(metrics, context, observation_time, contract_available_at)
         return metrics
 
     def _add_positioning_metrics(
@@ -314,25 +338,28 @@ class ReferenceFeatureEngine:
         context: MarketContext,
     ) -> None:
         current = context.current_curve
-        current_slope = self._snapshot_slope(current)
+        current_shape = self._snapshot_shape(current)
+        current_slope = current_shape.slope
         historical = sorted(
             [curve for curve in context.historical_curves if current is None or curve.trading_date < current.trading_date],
             key=lambda item: item.trading_date,
         )
-        historical_slopes = [value for value in (self._snapshot_slope(item) for item in historical) if value is not None]
+        historical_shapes = [self._snapshot_shape(item) for item in historical]
+        historical_slopes = [item.slope for item in historical_shapes if item.slope is not None]
         current_percentile = percentile_rank(historical_slopes, current_slope) if current_slope is not None else None
         current_zscore = robust_zscore(current_slope, historical_slopes) if current_slope is not None else None
-        # Preserve the economic sign of the curve: backwardation is positive
-        # and contango is negative. Historical z-score remains metadata; the
-        # separate change feature captures strengthening or weakening.
         slope_score = tanh_score(current_slope / 0.10) if current_slope is not None else None
 
+        comparable_history = [
+            item for item in historical_shapes if self._comparable_curve(current_shape, item) and item.slope is not None
+        ]
         slope_change = None
-        if current_slope is not None and len(historical_slopes) >= 20:
-            slope_change = current_slope - historical_slopes[-20]
+        if current_slope is not None and len(comparable_history) >= 20:
+            slope_change = current_slope - comparable_history[-20].slope
         historical_changes = [
-            historical_slopes[index] - historical_slopes[index - 20]
-            for index in range(20, len(historical_slopes))
+            comparable_history[index].slope - comparable_history[index - 20].slope
+            for index in range(20, len(comparable_history))
+            if comparable_history[index].slope is not None and comparable_history[index - 20].slope is not None
         ]
         change_zscore = robust_zscore(slope_change, historical_changes) if slope_change is not None else None
         change_score = (
@@ -343,10 +370,8 @@ class ReferenceFeatureEngine:
             else None
         )
 
-        curvature = self._snapshot_curvature(current)
-        historical_curvatures = [
-            value for value in (self._snapshot_curvature(item) for item in historical) if value is not None
-        ]
+        curvature = current_shape.curvature
+        historical_curvatures = [item.curvature for item in historical_shapes if item.curvature is not None]
         curvature_zscore = robust_zscore(curvature, historical_curvatures) if curvature is not None else None
         curvature_score = (
             tanh_score(curvature_zscore)
@@ -419,7 +444,7 @@ class ReferenceFeatureEngine:
             context=context,
             observation_time=observation_time,
             available_at=available_at,
-            source="continuous_back_adjusted",
+            source="research_index",
             sample_size=len(prices),
         )
         metrics["realized_vol_20d"] = self._observation(
@@ -635,36 +660,66 @@ class ReferenceFeatureEngine:
         return clip(base + 0.40 * slope_score, -100.0, 100.0)
 
     @staticmethod
-    def _snapshot_slope(snapshot: CurveSnapshot | None) -> float | None:
+    def _eligible_curve_points(snapshot: CurveSnapshot | None) -> list[CurvePoint]:
         if snapshot is None:
-            return None
-        points = sorted((point for point in snapshot.points if point.days_to_expiry > 0), key=lambda item: item.days_to_expiry)
-        if len(points) < 2:
-            return None
-        near, far = points[0], points[1]
-        return curve_slope(float(near.settlement), float(far.settlement), far.days_to_expiry - near.days_to_expiry)
+            return []
+        eligible = [
+            point
+            for point in snapshot.points
+            if point.days_to_expiry > 0 and point.settlement > 0 and point.volume >= 0 and point.open_interest >= 0
+        ]
+        return sorted(eligible, key=lambda item: item.days_to_expiry)
 
     @staticmethod
-    def _snapshot_curvature(snapshot: CurveSnapshot | None) -> float | None:
-        if snapshot is None:
-            return None
-        points = sorted((point for point in snapshot.points if point.days_to_expiry > 0), key=lambda item: item.days_to_expiry)
-        if len(points) < 3:
-            return None
-        first, second, third = points[:3]
-        front = curve_slope(
-            float(first.settlement),
-            float(second.settlement),
-            second.days_to_expiry - first.days_to_expiry,
+    def _tenor_bucket(days_to_expiry: int) -> str:
+        if days_to_expiry < 45:
+            return "n1"
+        if days_to_expiry < 90:
+            return "n2"
+        if days_to_expiry < 180:
+            return "n3"
+        return "n4"
+
+    @classmethod
+    def _snapshot_shape(cls, snapshot: CurveSnapshot | None) -> _CurveShape:
+        points = cls._eligible_curve_points(snapshot)
+        if len(points) < 2:
+            return _CurveShape(None, None, None, None)
+        near, far = points[0], points[1]
+        slope = curve_slope(float(near.settlement), float(far.settlement), far.days_to_expiry - near.days_to_expiry)
+        curvature = None
+        if len(points) >= 3:
+            first, second, third = points[:3]
+            front = curve_slope(
+                float(first.settlement),
+                float(second.settlement),
+                second.days_to_expiry - first.days_to_expiry,
+            )
+            back = curve_slope(
+                float(second.settlement),
+                float(third.settlement),
+                third.days_to_expiry - second.days_to_expiry,
+            )
+            if front is not None and back is not None:
+                curvature = front - back
+        return _CurveShape(
+            slope=slope,
+            curvature=curvature,
+            pair_id=f"{near.contract}|{far.contract}",
+            tenor_key=f"{cls._tenor_bucket(near.days_to_expiry)}|{cls._tenor_bucket(far.days_to_expiry)}",
         )
-        back = curve_slope(
-            float(second.settlement),
-            float(third.settlement),
-            third.days_to_expiry - second.days_to_expiry,
-        )
-        if front is None or back is None:
-            return None
-        return front - back
+
+    @staticmethod
+    def _comparable_curve(current: _CurveShape, historical: _CurveShape) -> bool:
+        return bool(current.pair_id and current.pair_id == historical.pair_id)
+
+    @classmethod
+    def _snapshot_slope(cls, snapshot: CurveSnapshot | None) -> float | None:
+        return cls._snapshot_shape(snapshot).slope
+
+    @classmethod
+    def _snapshot_curvature(cls, snapshot: CurveSnapshot | None) -> float | None:
+        return cls._snapshot_shape(snapshot).curvature
 
     @staticmethod
     def _quality(
@@ -699,10 +754,47 @@ class ReferenceFeatureEngine:
         percentile: float | None = None,
         zscore: float | None = None,
         status: DataStatus | None = None,
+        valid_n: int | None = None,
+        window_start: date | None = None,
+        window_end: date | None = None,
     ) -> MetricObservation:
         resolved_status, quality = self._quality(sample_size, minimum_sample, value, status)
         token = f"{context.symbol}|{context.selected_contract}|{context.request.as_of.isoformat()}|{name}"
         metric_id = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+        spec = FEATURES_BY_NAME.get(name)
+        if spec is not None and spec.series_type == "research_index":
+            require_compatible_series(name, source)
+        dependency_times = [available_at]
+        if spec is not None and spec.series_type == "real_contract_curve":
+            dependency_times.extend(c.available_at for c in context.historical_curves)
+            if context.current_curve is not None:
+                dependency_times.append(context.current_curve.available_at)
+        if "selected_contract" in source:
+            dependency_times.extend(b.available_at for b in context.contract_bars)
+        if "real_contract_curve" in source and context.current_curve is not None:
+            dependency_times.append(context.current_curve.available_at)
+        if name in {"settlement_vs_ma60", "contract_return_5d", "positioning_composite"}:
+            dependency_times.extend(b.available_at for b in context.continuous_bars)
+        available_at = max(dependency_times)
+        dependency_dates = []
+        if spec is not None:
+            if spec.series_type in {"selected_contract", "position_price"}:
+                dependency_dates = sorted(b.trading_date for b in context.contract_bars)
+            elif spec.series_type == "research_index":
+                dependency_dates = sorted(b.trading_date for b in context.continuous_bars)[-sample_size:] if sample_size else []
+            elif spec.series_type == "real_contract_curve":
+                dependency_dates = sorted(c.trading_date for c in context.historical_curves)
+                if context.current_curve is not None and context.current_curve.trading_date not in dependency_dates:
+                    dependency_dates.append(context.current_curve.trading_date)
+                    dependency_dates.sort()
+        if dependency_dates:
+            observation_time = datetime.combine(dependency_dates[-1], time.min, tzinfo=timezone.utc)
+        resolved_valid_n = valid_n if valid_n is not None else min(sample_size, max(lookback, 1) + 1)
+        resolved_end = window_end or observation_time.date()
+        resolved_start = window_start
+        if resolved_start is None:
+            resolved_start = (dependency_dates[-min(len(dependency_dates), max(lookback, 1) + 1)]
+                              if dependency_dates else resolved_end)
         return MetricObservation(
             metric_id=metric_id,
             name=name,
@@ -717,4 +809,9 @@ class ReferenceFeatureEngine:
             source=source,
             quality_score=quality,
             status=resolved_status,
+            valid_n=resolved_valid_n,
+            window_start=resolved_start,
+            window_end=resolved_end,
+            lineage_id=spec.name if spec is not None else name,
+            series_type=spec.series_type if spec is not None else None,
         )

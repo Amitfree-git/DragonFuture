@@ -34,7 +34,7 @@ class InvalidationEngine:
                         else "连续两个交易日结算价升破MA60。"
                     ),
                     metric_name="settlement_vs_ma60",
-                    operator="cross_below" if bullish else "cross_above",
+                    operator="lt" if bullish else "gt",
                     threshold=0.0,
                     current_value=metrics["settlement_vs_ma60"].value,
                     consecutive_bars=2,
@@ -89,7 +89,8 @@ class InvalidationEngine:
         for condition in conditions:
             metric = metrics.get(condition.metric_name)
             current = getattr(metric, condition.value_field) if metric is not None else None
-            triggered = self._triggered(condition.operator, current, condition.threshold)
+            triggered = (condition.consecutive_bars == 1 and not condition.operator.startswith("cross_")
+                         and self._triggered(condition.operator, current, condition.threshold))
             evaluated.append(
                 condition.model_copy(update={"current_value": current, "triggered": triggered})
             )

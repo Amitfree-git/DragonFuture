@@ -47,10 +47,10 @@ class DailyBar:
     contract_id: int
     contract: str
     trading_date: date
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
+    open: Decimal | None
+    high: Decimal | None
+    low: Decimal | None
+    close: Decimal | None
     settlement: Decimal
     previous_settlement: Decimal | None
     volume: int
@@ -81,6 +81,9 @@ class ContinuousBar:
     roll_flag: bool
     available_at: datetime
     input_hash: str
+    research_index: Decimal | None = None
+    series_snapshot_id: str | None = None
+    data_mode: str = "final_only"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,9 +129,22 @@ class MarketContext:
     recent_roll_date: date | None
     contract_selection_reason: str
     input_data_hash: str
+    series_basis: str = "continuous"
+    series_snapshot_id: str | None = None
+    mapping_effective_session: date | None = None
+    data_mode: str = "final_only"
 
     @property
     def source_contracts(self) -> tuple[str, ...]:
         contracts = {bar.source_contract for bar in self.continuous_bars}
         contracts.add(self.selected_contract)
         return tuple(sorted(contracts))
+
+
+@dataclass(frozen=True, slots=True)
+class EffectiveContractMapping:
+    contract: ContractRef | None
+    decision_date: date
+    effective_session: date
+    action: str
+    policy_version: str

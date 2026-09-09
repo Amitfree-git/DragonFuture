@@ -46,6 +46,8 @@ class OpportunityEngine:
             if direction.score is not None and direction.score < 0
             else TradeSide.NONE
         )
+        if self._optional_metric(metrics, "extension_atr") is None:
+            hard_reasons.append("missing_entry_atr")
         entry_quality = self._entry_quality(side, metrics)
         regime_fit = self._regime_fit(side, regime)
         liquidity_metric = metrics.get("liquidity_quality_score")

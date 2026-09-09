@@ -77,9 +77,11 @@ class ConfidenceEngine:
         self,
         direction: DirectionAssessment,
         factors: list[FactorAssessment],
-    ) -> float:
-        if direction.score is None or abs(direction.score) < 1e-12:
-            return 50.0
+    ) -> float | None:
+        if direction.score is None:
+            return None
+        if abs(direction.score) < 1e-12:
+            return None
         weights = self.config.direction_weights[direction.horizon.value]
         available = 0.0
         opposing = 0.0

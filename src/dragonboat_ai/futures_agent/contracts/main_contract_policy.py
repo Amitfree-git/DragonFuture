@@ -46,7 +46,7 @@ class LiquidityConfirmedMainContractPolicy:
         for candidates in candidate_history:
             eligible = self._eligible(candidates)
             if eligible:
-                winners.append(max(eligible, key=lambda item: (item.open_interest, item.volume, -item.days_to_expiry)))
+                winners.append(self.rank(eligible))
         if not winners:
             raise InsufficientDataError("All contracts are inside the expiry/liquidity exclusion zone.")
 
@@ -86,3 +86,19 @@ class LiquidityConfirmedMainContractPolicy:
             or item.open_interest_share >= self.minimum_oi_share
         ]
         return share_safe or expiry_safe
+
+    def rank(self, candidates: list[ContractCandidate]) -> ContractCandidate:
+        eligible = self._eligible(candidates)
+        pool = eligible or list(candidates)
+        if not pool:
+            raise InsufficientDataError("No rankable contract candidates.")
+        return min(pool, key=self._rank_key)
+
+    @staticmethod
+    def _rank_key(item: ContractCandidate) -> tuple:
+        return (
+            -item.open_interest,
+            -item.volume,
+            -item.days_to_expiry,
+            item.contract.contract_code,
+        )

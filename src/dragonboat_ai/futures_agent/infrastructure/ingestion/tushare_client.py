@@ -48,6 +48,37 @@ class TushareFuturesClient:
             {"ts_code": ts_code, "start_date": start, "end_date": end},
         )
 
+    def fetch_price_limits(self, *, ts_code: str, start: str, end: str) -> list[dict]:
+        # One contract and at most 366 calendar dates per request, below 4000 rows.
+        from datetime import datetime, timedelta
+        first = datetime.strptime(start, "%Y%m%d").date()
+        last = datetime.strptime(end, "%Y%m%d").date()
+        rows = []
+        while first <= last:
+            stop = min(first + timedelta(days=365), last)
+            chunk = self.call("ft_limit", {
+                "ts_code": ts_code, "start_date": first.strftime("%Y%m%d"),
+                "end_date": stop.strftime("%Y%m%d"),
+            }, fields="ts_code,trade_date,up_limit,down_limit")
+            if len(chunk) >= 4000:
+                raise TushareRequestError("LIMIT_RESPONSE_TRUNCATED", "limit response reached provider cap")
+            rows.extend(chunk)
+            first = stop + timedelta(days=1)
+        return rows
+
+    def fetch_trade_cal(self, *, exchange: str, start: str, end: str) -> list[dict]:
+        return self.call(
+            "trade_cal",
+            {"exchange": exchange.upper(), "start_date": start, "end_date": end},
+            fields="exchange,cal_date,is_open,pretrade_date",
+        )
+
+    def fetch_mapping(self, *, product: str, exchange: str, start: str, end: str) -> list[dict]:
+        from dragonboat_ai.futures_agent.infrastructure.ingestion.exchanges import tushare_suffix
+
+        ts_code = f"{product.upper()}.{tushare_suffix(exchange)}"
+        return self.call("fut_mapping", {"ts_code": ts_code, "start_date": start, "end_date": end})
+
     def call(self, api_name: str, params: dict[str, Any], fields: str | None = None) -> list[dict]:
         payload: dict[str, Any] = {
             "api_name": api_name,
